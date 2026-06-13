@@ -1,6 +1,6 @@
 export type TripStyle = 'תרבות' | 'טבע' | 'עיר' | 'חוף' | 'הרפתקאות' | 'קולינריה' | 'משפחה';
 export type Priority = 'חובה' | 'רוצה' | 'אולי';
-export type PlaceType = 'אטרקציה' | 'מסעדה' | 'מוזיאון' | 'שוק' | 'פארק' | 'שכונה' | 'אחר';
+export type PlaceType = 'אטרקציה' | 'מסעדה' | 'קפה' | 'מוזיאון' | 'שוק' | 'פארק' | 'שכונה' | 'אחר';
 export type ExpenseCategory = 'אוכל' | 'תחבורה' | 'כניסות' | 'קניות' | 'לינה' | 'אחר';
 
 export interface Trip {
@@ -29,13 +29,21 @@ export interface Document {
 
 export interface Place {
   id: string;
-  name: string;
+  nameHe: string;
+  nameEn?: string;
+  city?: string;
+  area?: string;
   type: PlaceType;
-  priority: Priority;
-  note: string;
-  address?: string;
-  duration?: number; // hours
-  assignedDay?: number;
+  must: boolean;
+  visited: boolean;
+  booked: boolean;
+  priceChild?: number;
+  priceAdult?: number;
+  rating?: number;
+  travelTime?: string;
+  description?: string;
+  website?: string;
+  duration?: number;
 }
 
 export interface DaySchedule {

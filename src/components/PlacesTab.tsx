@@ -1,16 +1,11 @@
 import { useState } from 'react';
-import type { Trip, Place, Priority, PlaceType } from '../types';
+import type { Trip, Place, PlaceType } from '../types';
 import { generateId } from '../storage';
 
-const PRIORITIES: Priority[] = ['חובה', 'רוצה', 'אולי'];
-const TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
-const PRIORITY_COLOR: Record<Priority, string> = {
-  'חובה': '#ef4444',
-  'רוצה': '#f59e0b',
-  'אולי': '#6b7280',
-};
+const TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
 
-type SortKey = 'name' | 'type' | 'priority';
+type SortKey = 'nameHe' | 'type' | 'city' | 'rating' | 'must';
+type FilterKey = 'הכל' | 'must' | 'visited' | 'לא ביקרנו';
 
 interface Props {
   trip: Trip;
@@ -18,33 +13,38 @@ interface Props {
 }
 
 const blank = (): Omit<Place, 'id'> => ({
-  name: '', type: 'אטרקציה', priority: 'רוצה', note: '', address: '', duration: 2,
+  nameHe: '', nameEn: '', city: '', area: '', type: 'אטרקציה',
+  must: false, visited: false, booked: false,
+  priceChild: undefined, priceAdult: undefined,
+  rating: undefined, travelTime: '', description: '', website: '', duration: 2,
 });
 
 export default function PlacesTab({ trip, onChange }: Props) {
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(blank());
-  const [sort, setSort] = useState<SortKey>('priority');
-  const [filterPriority, setFilterPriority] = useState<Priority | 'הכל'>('הכל');
+  const [sort, setSort] = useState<SortKey>('must');
+  const [filter, setFilter] = useState<FilterKey>('הכל');
 
   function sorted(places: Place[]): Place[] {
-    const priorityOrder: Record<Priority, number> = { 'חובה': 0, 'רוצה': 1, 'אולי': 2 };
-    const filtered = filterPriority === 'הכל' ? places : places.filter(p => p.priority === filterPriority);
-    return [...filtered].sort((a, b) => {
-      if (sort === 'priority') return priorityOrder[a.priority] - priorityOrder[b.priority];
-      if (sort === 'name') return a.name.localeCompare(b.name, 'he');
+    let filtered = [...places];
+    if (filter === 'must') filtered = filtered.filter(p => p.must);
+    if (filter === 'visited') filtered = filtered.filter(p => p.visited);
+    if (filter === 'לא ביקרנו') filtered = filtered.filter(p => !p.visited);
+
+    return filtered.sort((a, b) => {
+      if (sort === 'must') return Number(b.must) - Number(a.must);
+      if (sort === 'rating') return (b.rating ?? 0) - (a.rating ?? 0);
+      if (sort === 'nameHe') return a.nameHe.localeCompare(b.nameHe, 'he');
+      if (sort === 'city') return (a.city ?? '').localeCompare(b.city ?? '', 'he');
       return a.type.localeCompare(b.type, 'he');
     });
   }
 
   function save() {
-    if (!form.name.trim()) return;
+    if (!form.nameHe.trim()) return;
     if (editId) {
-      onChange({
-        ...trip,
-        places: trip.places.map(p => p.id === editId ? { ...form, id: editId } : p),
-      });
+      onChange({ ...trip, places: trip.places.map(p => p.id === editId ? { ...form, id: editId } : p) });
       setEditId(null);
     } else {
       onChange({ ...trip, places: [...trip.places, { ...form, id: generateId() }] });
@@ -54,13 +54,17 @@ export default function PlacesTab({ trip, onChange }: Props) {
   }
 
   function startEdit(place: Place) {
-    setForm({ name: place.name, type: place.type, priority: place.priority, note: place.note, address: place.address, duration: place.duration });
+    setForm({ ...place });
     setEditId(place.id);
     setAdding(true);
   }
 
   function remove(id: string) {
     onChange({ ...trip, places: trip.places.filter(p => p.id !== id) });
+  }
+
+  function toggle(id: string, field: 'must' | 'visited' | 'booked') {
+    onChange({ ...trip, places: trip.places.map(p => p.id === id ? { ...p, [field]: !p[field] } : p) });
   }
 
   const display = sorted(trip.places);
@@ -71,22 +75,20 @@ export default function PlacesTab({ trip, onChange }: Props) {
         <div className="toolbar-right">
           <span className="count-badge">{trip.places.length} מקומות</span>
           <div className="filter-chips">
-            {(['הכל', ...PRIORITIES] as (Priority | 'הכל')[]).map(p => (
-              <button
-                key={p}
-                className={`chip ${filterPriority === p ? 'chip-active' : ''}`}
-                onClick={() => setFilterPriority(p)}
-              >
-                {p}
+            {(['הכל', 'must', 'visited', 'לא ביקרנו'] as FilterKey[]).map(f => (
+              <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>
+                {f === 'must' ? '⭐ Must' : f === 'visited' ? '✅ ביקרנו' : f}
               </button>
             ))}
           </div>
         </div>
         <div className="toolbar-left">
           <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="sort-select">
-            <option value="priority">מיון: עדיפות</option>
-            <option value="name">מיון: שם</option>
-            <option value="type">מיון: סוג</option>
+            <option value="must">מיון: Must</option>
+            <option value="rating">מיון: רייטינג</option>
+            <option value="nameHe">מיון: שם</option>
+            <option value="city">מיון: עיר</option>
+            <option value="type">מיון: קטגוריה</option>
           </select>
           <button className="btn-primary btn-sm" onClick={() => { setAdding(true); setEditId(null); setForm(blank()); }}>
             + הוסף מקום
@@ -97,37 +99,83 @@ export default function PlacesTab({ trip, onChange }: Props) {
       {adding && (
         <div className="add-form">
           <h3>{editId ? 'עריכת מקום' : 'מקום חדש'}</h3>
+
           <div className="field-row">
             <div className="field">
-              <label>שם *</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="שם המקום" />
+              <label>שם בעברית *</label>
+              <input value={form.nameHe} onChange={e => setForm(f => ({ ...f, nameHe: e.target.value }))} placeholder="שם המקום" />
+            </div>
+            <div className="field">
+              <label>Name in English</label>
+              <input value={form.nameEn || ''} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Name in English" />
+            </div>
+          </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label>עיר</label>
+              <input value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="עיר" />
+            </div>
+            <div className="field">
+              <label>אזור</label>
+              <input value={form.area || ''} onChange={e => setForm(f => ({ ...f, area: e.target.value }))} placeholder="אזור / שכונה" />
             </div>
             <div className="field field-sm">
-              <label>סוג</label>
+              <label>קטגוריה</label>
               <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as PlaceType }))}>
                 {TYPES.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
-            <div className="field field-sm">
-              <label>עדיפות</label>
-              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value as Priority }))}>
-                {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-              </select>
+          </div>
+
+          <div className="field-row">
+            <div className="field field-xs">
+              <label>מחיר ילד ₪</label>
+              <input type="number" min={0} value={form.priceChild ?? ''} onChange={e => setForm(f => ({ ...f, priceChild: e.target.value ? Number(e.target.value) : undefined }))} />
             </div>
             <div className="field field-xs">
-              <label>שעות</label>
-              <input type="number" min={0.5} max={12} step={0.5} value={form.duration}
-                onChange={e => setForm(f => ({ ...f, duration: Number(e.target.value) }))} />
+              <label>מחיר מבוגר ₪</label>
+              <input type="number" min={0} value={form.priceAdult ?? ''} onChange={e => setForm(f => ({ ...f, priceAdult: e.target.value ? Number(e.target.value) : undefined }))} />
+            </div>
+            <div className="field field-xs">
+              <label>רייטינג</label>
+              <input type="number" min={1} max={5} step={0.1} value={form.rating ?? ''} onChange={e => setForm(f => ({ ...f, rating: e.target.value ? Number(e.target.value) : undefined }))} />
+            </div>
+            <div className="field field-sm">
+              <label>זמן נסיעה</label>
+              <input value={form.travelTime || ''} onChange={e => setForm(f => ({ ...f, travelTime: e.target.value }))} placeholder="למשל: 20 דק'" />
+            </div>
+            <div className="field field-xs">
+              <label>שעות ביקור</label>
+              <input type="number" min={0.5} max={12} step={0.5} value={form.duration ?? ''} onChange={e => setForm(f => ({ ...f, duration: Number(e.target.value) }))} />
             </div>
           </div>
+
           <div className="field">
-            <label>כתובת / הערה לניווט</label>
-            <input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="כתובת או שם לחיפוש במפה" />
+            <label>מה זה?</label>
+            <input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="תיאור קצר..." />
           </div>
+
           <div className="field">
-            <label>הערה אישית</label>
-            <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="טיפ, המלצה, שעות פתיחה..." />
+            <label>אתר</label>
+            <input value={form.website || ''} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://..." />
           </div>
+
+          <div className="checkboxes-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.must} onChange={e => setForm(f => ({ ...f, must: e.target.checked }))} />
+              ⭐ Must
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.visited} onChange={e => setForm(f => ({ ...f, visited: e.target.checked }))} />
+              ✅ ביקרנו
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.booked} onChange={e => setForm(f => ({ ...f, booked: e.target.checked }))} />
+              📅 הוזמן
+            </label>
+          </div>
+
           <div className="form-actions">
             <button className="btn-primary" onClick={save}>שמור</button>
             <button className="btn-secondary" onClick={() => { setAdding(false); setEditId(null); }}>ביטול</button>
@@ -146,31 +194,55 @@ export default function PlacesTab({ trip, onChange }: Props) {
             <thead>
               <tr>
                 <th>שם</th>
-                <th>סוג</th>
-                <th>עדיפות</th>
-                <th>שעות</th>
-                <th>הערה</th>
+                <th>עיר / אזור</th>
+                <th>קטגוריה</th>
+                <th>מחיר</th>
+                <th>רייטינג</th>
+                <th>זמן נסיעה</th>
+                <th>⭐</th>
+                <th>✅</th>
+                <th>📅</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {display.map(place => (
-                <tr key={place.id}>
+                <tr key={place.id} className={place.visited ? 'row-visited' : ''}>
                   <td>
-                    <div className="place-name">{place.name}</div>
-                    {place.address && <div className="place-address">{place.address}</div>}
+                    <div className="place-name">{place.nameHe}</div>
+                    {place.nameEn && <div className="place-address">{place.nameEn}</div>}
+                    {place.description && <div className="place-address">{place.description}</div>}
+                    {place.website && <a href={place.website} target="_blank" rel="noreferrer" className="place-link">🔗 אתר</a>}
+                  </td>
+                  <td>
+                    {place.city && <div>{place.city}</div>}
+                    {place.area && <div className="place-address">{place.area}</div>}
                   </td>
                   <td><span className="type-badge">{place.type}</span></td>
                   <td>
-                    <span className="priority-badge" style={{ background: PRIORITY_COLOR[place.priority] }}>
-                      {place.priority}
-                    </span>
+                    {place.priceChild != null && <div className="price-row">ילד: ₪{place.priceChild}</div>}
+                    {place.priceAdult != null && <div className="price-row">מבוגר: ₪{place.priceAdult}</div>}
                   </td>
-                  <td>{place.duration}ש'</td>
-                  <td className="note-cell">{place.note}</td>
+                  <td>{place.rating != null && <span className="rating">⭐ {place.rating}</span>}</td>
+                  <td>{place.travelTime}</td>
+                  <td>
+                    <button className="toggle-btn" onClick={() => toggle(place.id, 'must')}>
+                      {place.must ? '⭐' : '☆'}
+                    </button>
+                  </td>
+                  <td>
+                    <button className="toggle-btn" onClick={() => toggle(place.id, 'visited')}>
+                      {place.visited ? '✅' : '⬜'}
+                    </button>
+                  </td>
+                  <td>
+                    <button className="toggle-btn" onClick={() => toggle(place.id, 'booked')}>
+                      {place.booked ? '📅' : '○'}
+                    </button>
+                  </td>
                   <td className="actions-cell">
-                    <button className="icon-btn" onClick={() => startEdit(place)} title="עריכה">✏️</button>
-                    <button className="icon-btn" onClick={() => remove(place.id)} title="מחיקה">🗑️</button>
+                    <button className="icon-btn" onClick={() => startEdit(place)}>✏️</button>
+                    <button className="icon-btn" onClick={() => remove(place.id)}>🗑️</button>
                   </td>
                 </tr>
               ))}

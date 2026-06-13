@@ -24,8 +24,7 @@ function buildAutoSchedule(trip: Trip): DaySchedule[] {
   const days = tripDays(trip);
   if (days === 0) return [];
 
-  const priorityOrder: Record<string, number> = { 'חובה': 0, 'רוצה': 1, 'אולי': 2 };
-  const sorted = [...trip.places].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const sorted = [...trip.places].sort((a, b) => Number(b.must) - Number(a.must));
 
   const hoursPerDay = 8;
   const schedule: DaySchedule[] = Array.from({ length: days }, (_, i) => ({
@@ -115,7 +114,7 @@ export default function ScheduleTab({ trip, onChange }: Props) {
                 draggable
                 onDragStart={() => setDraggingPlace(p.id)}
               >
-                {p.name}
+                {p.nameHe}
               </div>
             ))}
           </div>
@@ -148,7 +147,7 @@ export default function ScheduleTab({ trip, onChange }: Props) {
                     draggable
                     onDragStart={() => setDraggingPlace(p.id)}
                   >
-                    <span>{p.name}</span>
+                    <span>{p.nameHe}</span>
                     <button className="pill-remove" onClick={() => removePlaceFromDay(day, p.id)}>×</button>
                   </div>
                 ))}
