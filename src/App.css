@@ -481,7 +481,44 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   opacity: .4; transition: opacity .15s;
 }
 .idea-card-btn:hover, .idea-card-btn.on { opacity: 1; }
+.idea-card-btn:disabled { cursor: not-allowed; }
 .idea-card-edit { font-size: 14px; }
+
+/* Spin animation for refresh */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin .8s linear infinite; }
+
+/* Calendar date-picker popover */
+.cal-btn-wrap { position: relative; display: inline-flex; }
+.cal-date-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--border-mid);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  z-index: 200;
+  min-width: 160px;
+  overflow: hidden;
+}
+.cal-date-picker-title {
+  padding: 8px 12px 6px;
+  font-size: 11px; font-weight: 700;
+  color: var(--ink-muted); text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border);
+}
+.cal-date-list {
+  max-height: 200px; overflow-y: auto;
+  scrollbar-width: thin;
+}
+.cal-date-btn {
+  display: block; width: 100%; text-align: right;
+  background: none; border: none; cursor: pointer;
+  padding: 8px 12px; font-size: 13px; font-family: inherit; color: var(--ink);
+  transition: background .1s;
+}
+.cal-date-btn:hover { background: var(--surface2); }
 
 /* Keep old meta-chip for .idea-name-he etc used elsewhere */
 .idea-meta-chip {

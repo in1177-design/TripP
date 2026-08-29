@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import type { Trip, Place, PlaceType } from '../types';
+import type { Trip, Place, PlaceType, ItineraryItem } from '../types';
 import { generateId } from '../storage';
 import { enrichPlace } from '../aiService';
 
@@ -9,10 +9,13 @@ const TYPE_ICONS: Record<string, string> = {
   'שוק': '🛒', 'פארק': '🌳', 'שכונה': '🏘️', 'אחר': '📌',
 };
 
-// Food types — shown in "אוכל" tab; everything else = "אטרקציות"
+const WEEK_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
+
+// Food types — shown in "אוכל" tab
 const FOOD_TYPES = new Set<PlaceType>(['מסעדה', 'קפה']);
 type CityTab = 'attractions' | 'food';
-type FilterKey = 'הכל' | 'must' | 'visited' | 'לא ביקרנו';
+type FilterKey = 'הכל' | 'must';
 
 // Normalize Latin city names → Hebrew canonical names
 const CITY_ALIASES: Record<string, string> = {
@@ -27,6 +30,24 @@ const CITY_ALIASES: Record<string, string> = {
 function normalizeCity(city: string): string {
   if (!city) return 'כללי';
   return CITY_ALIASES[city.trim().toLowerCase()] ?? city.trim();
+}
+
+// Build sorted trip-date list (safe for all timezones)
+function getTripDates(start: string, end: string): string[] {
+  if (!start || !end) return [];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const toKey = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const dates: string[] = [];
+  const d = new Date(start + 'T12:00:00');
+  const e = new Date(end   + 'T12:00:00');
+  while (d <= e) { dates.push(toKey(d)); d.setDate(d.getDate() + 1); }
+  return dates;
+}
+
+function fmtDateLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  return `${WEEK_HE[d.getDay()]} ${d.getDate()} ${MONTH_HE[d.getMonth()]}`;
 }
 
 interface Props {
@@ -44,12 +65,7 @@ const blank = (): Omit<Place, 'id'> => ({
 /* ── Wikipedia image fetch ─────────────────────────────────────── */
 async function fetchWikiImage(searchTerm: string): Promise<string | null> {
   const clean = (s: string) =>
-    s.trim()
-      .replace(/[&/].*/g, '')
-      .replace(/['''`]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    s.trim().replace(/[&/].*/g, '').replace(/['''`]/g, '').replace(/\s+/g, ' ').trim();
   const term = clean(searchTerm);
   if (!term) return null;
 
@@ -121,19 +137,26 @@ async function searchImages(rawTerm: string): Promise<string[]> {
 
 /* ── Main component ────────────────────────────────────────────── */
 export default function PlacesTab({ trip, onChange }: Props) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<Place, 'id'>>(blank());
-  const [filter, setFilter] = useState<FilterKey>('הכל');
-  const [cityTabs, setCityTabs] = useState<Record<string, CityTab>>({});
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [imgResults, setImgResults] = useState<string[]>([]);
-  const [imgSearching, setImgSearching] = useState(false);
+  const [modalOpen,     setModalOpen]     = useState(false);
+  const [editingId,     setEditingId]     = useState<string | null>(null);
+  const [form,          setForm]          = useState<Omit<Place, 'id'>>(blank());
+  const [filter,        setFilter]        = useState<FilterKey>('הכל');
+  const [cityTabs,      setCityTabs]      = useState<Record<string, CityTab>>({});
+  const [aiLoading,     setAiLoading]     = useState(false);
+  const [aiError,       setAiError]       = useState('');
+  const [imgResults,    setImgResults]    = useState<string[]>([]);
+  const [imgSearching,  setImgSearching]  = useState(false);
+  const [refreshingId,  setRefreshingId]  = useState<string | null>(null);
+  const [calPickerId,   setCalPickerId]   = useState<string | null>(null);  // date-picker open for this place
 
   // Wikipedia image cache (session-only)
   const [imageCache, setImageCache] = useState<Record<string, string>>({});
   const attempted = useRef<Set<string>>(new Set());
+
+  const tripDates = useMemo(
+    () => getTripDates(trip.startDate, trip.endDate),
+    [trip.startDate, trip.endDate]
+  );
 
   useEffect(() => {
     trip.places.forEach(async place => {
@@ -151,13 +174,9 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
   /* ── City grouping ──────────────────────────────────────────── */
   const cityGroups = useMemo(() => {
-    // Apply global filter
     let places = [...trip.places];
-    if (filter === 'must')       places = places.filter(p => p.must);
-    if (filter === 'visited')    places = places.filter(p => p.visited);
-    if (filter === 'לא ביקרנו') places = places.filter(p => !p.visited);
+    if (filter === 'must') places = places.filter(p => p.must);
 
-    // Group by city
     const map: Record<string, Place[]> = {};
     places.forEach(p => {
       const city = normalizeCity(p.city || '');
@@ -165,7 +184,6 @@ export default function PlacesTab({ trip, onChange }: Props) {
       map[city].push(p);
     });
 
-    // Sort within each city: attractions first (must first), then food
     return Object.entries(map)
       .sort(([a], [b]) => a === 'כללי' ? 1 : b === 'כללי' ? -1 : a.localeCompare(b, 'he'))
       .map(([city, ps]) => {
@@ -181,34 +199,21 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
   /* ── CRUD ───────────────────────────────────────────────────── */
   function openAdd() {
-    setForm(blank());
-    setEditingId(null);
-    setAiError('');
-    setModalOpen(true);
+    setForm(blank()); setEditingId(null); setAiError(''); setModalOpen(true);
   }
-
   function openEdit(place: Place) {
-    setForm({ ...place });
-    setEditingId(place.id);
-    setAiError('');
-    setModalOpen(true);
+    setForm({ ...place }); setEditingId(place.id); setAiError(''); setModalOpen(true);
   }
-
   function closeModal() {
-    setModalOpen(false);
-    setEditingId(null);
-    setImgResults([]);
-    setImgSearching(false);
+    setModalOpen(false); setEditingId(null); setImgResults([]); setImgSearching(false);
   }
 
   async function handleImgSearch() {
     const term = form.nameEn || form.nameHe;
     if (!term) return;
-    setImgSearching(true);
-    setImgResults([]);
+    setImgSearching(true); setImgResults([]);
     const imgs = await searchImages(term);
-    setImgResults(imgs);
-    setImgSearching(false);
+    setImgResults(imgs); setImgSearching(false);
   }
 
   function save() {
@@ -225,8 +230,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
     onChange({ ...trip, places: trip.places.filter(p => p.id !== id) });
   }
 
-  function toggle(id: string, field: 'must' | 'visited' | 'booked') {
-    onChange({ ...trip, places: trip.places.map(p => p.id === id ? { ...p, [field]: !p[field] } : p) });
+  function toggleMust(id: string) {
+    onChange({ ...trip, places: trip.places.map(p => p.id === id ? { ...p, must: !p.must } : p) });
   }
 
   async function handleAIEnrich() {
@@ -242,18 +247,55 @@ export default function PlacesTab({ trip, onChange }: Props) {
     }
   }
 
+  /* ── Refresh place details from web ────────────────────────── */
+  async function handleRefresh(place: Place) {
+    setRefreshingId(place.id);
+    try {
+      const [enriched, imgUrl] = await Promise.all([
+        enrichPlace(place.nameHe, trip.destination).catch(() => ({})),
+        fetchWikiImage(place.nameEn || place.nameHe),
+      ]);
+      const updated: Place = {
+        ...place,
+        ...enriched,
+        ...(imgUrl ? { imageUrl: imgUrl } : {}),
+      };
+      onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
+      if (imgUrl) {
+        setImageCache(c => ({ ...c, [place.id]: imgUrl }));
+        attempted.current.delete(place.id); // allow re-cache
+      }
+    } catch { /* silent */ }
+    finally { setRefreshingId(null); }
+  }
+
+  /* ── Add place to itinerary for a date ─────────────────────── */
+  function handleAddToCalendar(place: Place, date: string) {
+    const item: ItineraryItem = {
+      id: generateId(),
+      date,
+      type: 'activity',
+      name: place.nameHe,
+      status: 'planned',
+      notes: place.nameEn,
+      address: place.area || undefined,
+    };
+    onChange({ ...trip, itinerary: [...(trip.itinerary || []), item] });
+    setCalPickerId(null);
+  }
+
   /* ── Render ─────────────────────────────────────────────────── */
   return (
-    <div className="places-tab" dir="rtl">
+    <div className="places-tab" dir="rtl" onClick={() => setCalPickerId(null)}>
 
       {/* ── TOOLBAR ── */}
       <div className="tab-toolbar">
         <div className="toolbar-right">
           <span className="count-badge">{trip.places.length} רעיונות</span>
           <div className="filter-chips">
-            {(['הכל', 'must', 'visited', 'לא ביקרנו'] as FilterKey[]).map(f => (
+            {(['הכל', 'must'] as FilterKey[]).map(f => (
               <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>
-                {f === 'must' ? '⭐ Must' : f === 'visited' ? '✅ ביקרנו' : f}
+                {f === 'must' ? '⭐ Must' : f}
               </button>
             ))}
           </div>
@@ -287,8 +329,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       className={`city-tab-btn ${tab === 'attractions' ? 'active' : ''}`}
                       onClick={() => setCityTabs(prev => ({ ...prev, [city]: 'attractions' }))}
                     >
-                      🎯 אטרקציות
-                      <span className="city-tab-count">{attractions.length}</span>
+                      🎯 אטרקציות<span className="city-tab-count">{attractions.length}</span>
                     </button>
                   )}
                   {hasFood && (
@@ -296,8 +337,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       className={`city-tab-btn ${tab === 'food' ? 'active' : ''}`}
                       onClick={() => setCityTabs(prev => ({ ...prev, [city]: 'food' }))}
                     >
-                      🍽️ אוכל
-                      <span className="city-tab-count">{food.length}</span>
+                      🍽️ אוכל<span className="city-tab-count">{food.length}</span>
                     </button>
                   )}
                 </div>
@@ -310,10 +350,14 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 <div className="idea-cards">
                   {display.map(place => {
                     const img = imageCache[place.id];
+                    const isRefreshing = refreshingId === place.id;
+                    const calOpen = calPickerId === place.id;
+
                     return (
                       <div
                         key={place.id}
-                        className={`idea-card ${place.visited ? 'idea-card--visited' : ''} ${place.must ? 'idea-card--must' : ''}`}
+                        className={`idea-card ${place.must ? 'idea-card--must' : ''}`}
+                        onClick={e => e.stopPropagation()}
                       >
                         {/* Image */}
                         <div
@@ -325,12 +369,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                             <span className="idea-card-chip">{TYPE_ICONS[place.type]} {place.type}</span>
                             {place.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
                           </div>
-                          <button
-                            type="button"
-                            className="idea-card-del"
-                            onClick={() => remove(place.id)}
-                            title="מחק"
-                          >✕</button>
+                          <button type="button" className="idea-card-del" onClick={() => remove(place.id)} title="מחק">✕</button>
                         </div>
 
                         {/* Body */}
@@ -369,30 +408,65 @@ export default function PlacesTab({ trip, onChange }: Props) {
                           {/* Footer */}
                           <div className="idea-card-footer">
                             <div className="idea-card-actions">
+
+                              {/* Must ⭐ */}
                               <button
                                 type="button"
                                 className={`idea-card-btn ${place.must ? 'on' : ''}`}
-                                onClick={() => toggle(place.id, 'must')}
+                                onClick={() => toggleMust(place.id)}
                                 title="Must"
                               >{place.must ? '⭐' : '☆'}</button>
+
+                              {/* Refresh 🔄 */}
                               <button
                                 type="button"
-                                className={`idea-card-btn ${place.visited ? 'on' : ''}`}
-                                onClick={() => toggle(place.id, 'visited')}
-                                title="ביקרנו"
-                              >{place.visited ? '✅' : '□'}</button>
-                              <button
-                                type="button"
-                                className={`idea-card-btn ${place.booked ? 'on' : ''}`}
-                                onClick={() => toggle(place.id, 'booked')}
-                                title="הוזמן"
-                              >{place.booked ? '📅' : '○'}</button>
+                                className="idea-card-btn idea-card-btn--refresh"
+                                onClick={() => handleRefresh(place)}
+                                disabled={isRefreshing}
+                                title="רענן פרטים"
+                              >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
+
+                              {/* Add to calendar 📅 — with date picker */}
+                              <div className="cal-btn-wrap">
+                                <button
+                                  type="button"
+                                  className={`idea-card-btn idea-card-btn--cal ${calOpen ? 'on' : ''}`}
+                                  onClick={e => { e.stopPropagation(); setCalPickerId(calOpen ? null : place.id); }}
+                                  title="הכנס ללוח שנה"
+                                >📅</button>
+
+                                {calOpen && tripDates.length > 0 && (
+                                  <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
+                                    <div className="cal-date-picker-title">בחרי תאריך</div>
+                                    <div className="cal-date-list">
+                                      {tripDates.map(date => (
+                                        <button
+                                          key={date}
+                                          type="button"
+                                          className="cal-date-btn"
+                                          onClick={() => handleAddToCalendar(place, date)}
+                                        >
+                                          {fmtDateLabel(date)}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {calOpen && tripDates.length === 0 && (
+                                  <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
+                                    <div className="cal-date-picker-title">אין תאריכים לטיול</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Edit ✏️ */}
                               <button
                                 type="button"
                                 className="idea-card-btn idea-card-edit"
                                 onClick={() => openEdit(place)}
                                 title="ערוך"
                               >✏️</button>
+
                             </div>
                           </div>
                         </div>
@@ -453,6 +527,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
               <div className="field"><label>תיאור</label><input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="תיאור קצר..." /></div>
               <div className="field"><label>אתר</label><input value={form.website || ''} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://..." /></div>
+
               {/* Image field + search */}
               <div className="field">
                 <label>תמונה</label>
@@ -468,11 +543,9 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     {imgSearching ? '⏳' : '🔍 חפש תמונה'}
                   </button>
                 </div>
-                {/* Current image preview */}
                 {form.imageUrl && (
                   <div className="img-preview" style={{ backgroundImage: `url(${form.imageUrl})` }} />
                 )}
-                {/* Search results grid */}
                 {imgResults.length > 0 && (
                   <div className="img-results">
                     <p className="img-results-label">בחרי תמונה:</p>
@@ -489,15 +562,10 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     </div>
                   </div>
                 )}
-                {imgResults.length === 0 && !imgSearching && imgResults !== undefined && (
-                  <span />
-                )}
               </div>
 
               <div className="checkboxes-row">
                 <label className="checkbox-label"><input type="checkbox" checked={form.must} onChange={e => setForm(f => ({ ...f, must: e.target.checked }))} /> ⭐ Must</label>
-                <label className="checkbox-label"><input type="checkbox" checked={form.visited} onChange={e => setForm(f => ({ ...f, visited: e.target.checked }))} /> ✅ ביקרנו</label>
-                <label className="checkbox-label"><input type="checkbox" checked={form.booked} onChange={e => setForm(f => ({ ...f, booked: e.target.checked }))} /> 📅 הוזמן</label>
               </div>
 
               <div className="form-actions">
