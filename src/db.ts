@@ -13,8 +13,20 @@ export async function fetchTrips(): Promise<Trip[]> {
   return snap.docs.map(d => d.data() as Trip);
 }
 
+export function stripUndefined(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    );
+  }
+  return obj;
+}
+
 export async function saveTrip(trip: Trip): Promise<void> {
-  await setDoc(doc(db, TRIPS, trip.id), trip);
+  await setDoc(doc(db, TRIPS, trip.id), stripUndefined(trip));
 }
 
 export async function deleteTrip(id: string): Promise<void> {

@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react';
+import {
+  HashRouter, Routes, Route, Navigate,
+  useNavigate, useParams, useLocation,
+} from 'react-router-dom';
 import { saveTrip, deleteTrip, subscribeTrips } from './db';
 import { generateId } from './storage';
 import type { Trip } from './types';
@@ -7,13 +11,11 @@ import TripForm from './components/TripForm';
 import TripView from './components/TripView';
 import './App.css';
 
-type View = 'list' | 'new' | 'trip';
-
-export default function App() {
+/* ── shared state lives here ── */
+function AppContent() {
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [view, setView] = useState<View>('list');
-  const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const unsub = subscribeTrips(data => {
@@ -25,39 +27,17 @@ export default function App() {
 
   async function handleSaveTrip(trip: Trip) {
     await saveTrip(trip);
-    setActiveTrip(trip);
-    setView('trip');
+    navigate(`/trip/${trip.id}/dashboard`, { replace: true });
+  }
+
+  // Update within TripView — no navigation, just save
+  async function handleUpdateTrip(trip: Trip) {
+    await saveTrip(trip);
   }
 
   async function handleDeleteTrip(id: string) {
     await deleteTrip(id);
-    setView('list');
-    setActiveTrip(null);
-  }
-
-  function handleNewTrip() {
-    const blank: Trip = {
-      id: generateId(),
-      destination: '',
-      startDate: '',
-      endDate: '',
-      travelers: 2,
-      style: [],
-      notes: '',
-      documents: [],
-      places: [],
-      schedule: [],
-      expenses: [],
-      journalEntries: [],
-      phase: 'before',
-    };
-    setActiveTrip(blank);
-    setView('new');
-  }
-
-  function handleEditTrip(trip: Trip) {
-    setActiveTrip(trip);
-    setView('new');
+    navigate('/', { replace: true });
   }
 
   if (loading) {
@@ -71,45 +51,140 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="app" dir="rtl">
-      <header className="app-header">
-        <div className="header-inner">
-          <button className="logo-btn" onClick={() => setView('list')}>
-            ✈️ MyTrip
-          </button>
-          {view !== 'list' && (
-            <button className="back-btn" onClick={() => setView('list')}>
-              ← כל הטיולים
-            </button>
-          )}
-        </div>
-      </header>
+  const location = useLocation();
+  // On trip view pages the hero carries all navigation — hide the top navbar
+  const onTripView = /^\/trip\/[^/]+\/(?!edit)/.test(location.pathname);
 
-      <main className="app-main">
-        {view === 'list' && (
-          <TripList
-            trips={trips}
-            onSelect={t => { setActiveTrip(t); setView('trip'); }}
-            onNew={handleNewTrip}
-          />
-        )}
-        {view === 'new' && activeTrip && (
-          <TripForm
-            trip={activeTrip}
-            onSave={handleSaveTrip}
-            onCancel={() => setView('list')}
-          />
-        )}
-        {view === 'trip' && activeTrip && (
-          <TripView
-            trip={activeTrip}
-            onChange={handleSaveTrip}
-            onDelete={() => handleDeleteTrip(activeTrip.id)}
-            onEdit={() => handleEditTrip(activeTrip)}
-          />
-        )}
+  return (
+    <div className={`app${onTripView ? ' app--trip-view' : ''}`} dir="rtl">
+      {!onTripView && (
+        <header className="app-header">
+          <div className="header-inner">
+            <button className="logo-btn" onClick={() => navigate('/')}>
+              ✈️ MyTrip
+            </button>
+            <Routes>
+              <Route path="/" element={null} />
+              <Route path="*" element={
+                <button className="back-btn" onClick={() => navigate('/')}>
+                  ← כל הטיולים
+                </button>
+              } />
+            </Routes>
+          </div>
+        </header>
+      )}
+
+      <main className={`app-main${onTripView ? ' app-main--trip' : ''}`}>
+        <Routes>
+          <Route path="/" element={
+            <TripList
+              trips={trips}
+              onSelect={t => navigate(`/trip/${t.id}/dashboard`)}
+              onNew={() => navigate('/new')}
+            />
+          } />
+
+          <Route path="/new" element={
+            <NewTripWrapper onSave={handleSaveTrip} onCancel={() => navigate('/')} />
+          } />
+
+          <Route path="/trip/:tripId/dashboard" element={
+            <TripViewWrapper
+              trips={trips}
+              onUpdate={handleUpdateTrip}
+              onSave={handleSaveTrip}
+              onDelete={handleDeleteTrip}
+            />
+          } />
+
+          <Route path="/trip/:tripId/edit" element={
+            <EditTripWrapper trips={trips} onSave={handleSaveTrip} />
+          } />
+
+          <Route path="/trip/:tripId/:tab" element={
+            <TripViewWrapper
+              trips={trips}
+              onUpdate={handleUpdateTrip}
+              onSave={handleSaveTrip}
+              onDelete={handleDeleteTrip}
+            />
+          } />
+
+          {/* fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
+  );
+}
+
+/* ── route wrappers ── */
+
+function NewTripWrapper({
+  onSave, onCancel,
+}: { onSave: (t: Trip) => Promise<void>; onCancel: () => void }) {
+  const [blank] = useState<Trip>(() => ({
+    id: generateId(),
+    destination: '',
+    startDate: '',
+    endDate: '',
+    travelers: 2,
+    style: [],
+    notes: '',
+    documents: [],
+    places: [],
+    schedule: [],
+    expenses: [],
+    journalEntries: [],
+    phase: 'before',
+  }));
+  return <TripForm trip={blank} onSave={onSave} onCancel={onCancel} />;
+}
+
+function EditTripWrapper({
+  trips, onSave,
+}: { trips: Trip[]; onSave: (t: Trip) => Promise<void> }) {
+  const { tripId } = useParams<{ tripId: string }>();
+  const navigate = useNavigate();
+  const trip = trips.find(t => t.id === tripId);
+  if (!trip) return <Navigate to="/" replace />;
+  return (
+    <TripForm
+      trip={trip}
+      onSave={onSave}
+      onCancel={() => navigate(`/trip/${tripId}/places`)}
+    />
+  );
+}
+
+function TripViewWrapper({
+  trips, onUpdate, onSave, onDelete,
+}: {
+  trips: Trip[];
+  onUpdate: (t: Trip) => Promise<void>;
+  onSave: (t: Trip) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const { tripId } = useParams<{ tripId: string }>();
+  const navigate = useNavigate();
+  const trip = trips.find(t => t.id === tripId);
+  if (!trip) return <Navigate to="/" replace />;
+  return (
+    <TripView
+      trip={trip}
+      onChange={onUpdate}
+      onDelete={() => onDelete(trip.id)}
+      onEdit={() => navigate(`/trip/${trip.id}/edit`)}
+    />
+  );
+}
+
+/* ── root ── */
+export default function App() {
+  return (
+    <HashRouter>
+      <AppContent />
+    </HashRouter>
   );
 }
