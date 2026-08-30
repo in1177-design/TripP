@@ -53,7 +53,7 @@ function HeroFlightCard({ flight }: { flight: Flight }) {
   );
 }
 
-export default function TripView({ trip, onChange, onDelete, onEdit }: Props) {
+export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: Props) {
   const { tripId, tab } = useParams<{ tripId: string; tab: string }>();
   const navigate = useNavigate();
 

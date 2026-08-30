@@ -50,10 +50,6 @@ export default function DashboardTab({ trip, onNavigate }: Props) {
     .filter(i => i.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))[0];
 
-  const tripDays = trip.startDate && trip.endDate
-    ? Math.max(1, Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / 86400000))
-    : null;
-
   return (
     <div className="dash-root" dir="rtl">
       <div className="dash-grid">

@@ -93,7 +93,6 @@ function AppContent() {
             <TripViewWrapper
               trips={trips}
               onUpdate={handleUpdateTrip}
-              onSave={handleSaveTrip}
               onDelete={handleDeleteTrip}
             />
           } />
@@ -106,7 +105,6 @@ function AppContent() {
             <TripViewWrapper
               trips={trips}
               onUpdate={handleUpdateTrip}
-              onSave={handleSaveTrip}
               onDelete={handleDeleteTrip}
             />
           } />
@@ -159,11 +157,10 @@ function EditTripWrapper({
 }
 
 function TripViewWrapper({
-  trips, onUpdate, onSave, onDelete,
+  trips, onUpdate, onDelete,
 }: {
   trips: Trip[];
   onUpdate: (t: Trip) => Promise<void>;
-  onSave: (t: Trip) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const { tripId } = useParams<{ tripId: string }>();

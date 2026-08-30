@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { Trip, ItineraryItem, ItemType, MealSlot, ItemStatus } from '../types';
+import type { Trip, ItineraryItem, ItemType, MealSlot, ItemStatus, Stay } from '../types';
 import { generateId } from '../storage';
 
 interface Props {
