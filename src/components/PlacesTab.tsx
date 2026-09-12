@@ -235,13 +235,23 @@ export default function PlacesTab({ trip, onChange }: Props) {
   }
 
   async function handleAIEnrich() {
-    if (!form.nameHe.trim()) return;
+    const searchName = form.nameEn?.trim() || form.nameHe.trim();
+    if (!searchName) return;
     setAiLoading(true); setAiError('');
     try {
-      const result = await enrichPlace(form.nameHe, trip.destination);
-      setForm(f => ({ ...f, ...result }));
-    } catch {
-      setAiError('לא הצלחתי למצוא מידע על המקום הזה');
+      // Pass English (or whatever was typed) as the primary search term, Hebrew as hint
+      const result = await enrichPlace(searchName, trip.destination, form.nameHe.trim() || undefined);
+      // Fill in nameHe from AI if we searched by English and nameHe was empty
+      if (!form.nameHe.trim() && result.nameHe) {
+        setForm(f => ({ ...f, ...result, nameHe: result.nameHe ?? f.nameHe }));
+      } else {
+        setForm(f => ({ ...f, ...result }));
+      }
+    } catch (err) {
+      const msg = err instanceof Error && err.name === 'AbortError'
+        ? 'הבקשה לקחה יותר מדי זמן — נסי שוב'
+        : 'לא הצלחתי למצוא מידע על המקום הזה';
+      setAiError(msg);
     } finally {
       setAiLoading(false);
     }
@@ -500,7 +510,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   <input value={form.nameEn || ''} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="Name in English" />
                 </div>
                 <button type="button" className="btn-ai" onClick={handleAIEnrich}
-                  disabled={aiLoading || !form.nameHe.trim()} title="מלא פרטים עם AI">
+                  disabled={aiLoading || (!form.nameHe.trim() && !form.nameEn?.trim())} title="מלא פרטים עם AI (עברית או אנגלית)">
                   {aiLoading ? '⏳' : '✨ AI'}
                 </button>
               </div>

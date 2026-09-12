@@ -2,6 +2,7 @@ import type { PlaceType } from './types';
 
 interface PlaceAIResult {
   nameEn?: string;
+  nameHe?: string;
   city?: string;
   area?: string;
   type?: PlaceType;
@@ -15,17 +16,27 @@ interface PlaceAIResult {
 
 const VALID_TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
 
-export async function enrichPlace(nameHe: string, tripDestination: string): Promise<PlaceAIResult> {
+/**
+ * Enrich a place with AI details.
+ * @param placeName  Hebrew or English name (uses whichever is provided)
+ * @param nameHe     Hebrew name (for the prompt; falls back to placeName)
+ * @param tripDestination  e.g. "קרקוב"
+ */
+export async function enrichPlace(
+  placeName: string,
+  tripDestination: string,
+  nameHe?: string,
+): Promise<PlaceAIResult> {
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  console.log('API key starts with:', apiKey?.slice(0, 20));
   if (!apiKey) throw new Error('אין API key');
 
   const prompt = `אתה עוזר לתכנן טיול ל${tripDestination}.
-המשתמש מוסיף מקום בשם: "${nameHe}"
+המשתמש מוסיף מקום בשם: "${placeName}"${nameHe && nameHe !== placeName ? ` (${nameHe})` : ''}
 
 החזר JSON בלבד (ללא טקסט נוסף) עם הפרטים הבאים:
 {
   "nameEn": "שם באנגלית",
+  "nameHe": "שם בעברית",
   "city": "עיר",
   "area": "שכונה או אזור",
   "type": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר",
@@ -37,20 +48,30 @@ export async function enrichPlace(nameHe: string, tripDestination: string): Prom
   "website": "כתובת אתר רשמי או null"
 }`;
 
-  const response = await fetch('/api/anthropic/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  // Use direct Anthropic API (works in both dev and production)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errText = await response.text();
@@ -60,11 +81,11 @@ export async function enrichPlace(nameHe: string, tripDestination: string): Prom
 
   const data = await response.json();
   const text = data.content?.[0]?.text ?? '{}';
-
   const json = JSON.parse(text.replace(/```json|```/g, '').trim());
 
   return {
     nameEn: json.nameEn || undefined,
+    nameHe: json.nameHe || undefined,
     city: json.city || undefined,
     area: json.area || undefined,
     type: VALID_TYPES.includes(json.type) ? json.type : undefined,
