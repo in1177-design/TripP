@@ -193,6 +193,7 @@ const DEFAULT_CUR = 'EUR';
 const blankForm = (): Omit<Expense, 'id'> => ({
   date: new Date().toISOString().slice(0, 10),
   dateEnd: undefined,
+  useDate: undefined,
   description: '', amount: 0,
   currency: DEFAULT_CUR, category: 'מסעדות', subcategory: undefined, paymentMethod: 'cash',
 });
@@ -221,6 +222,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [form, setForm]               = useState<Omit<Expense, 'id'>>(blankForm);
   const [spreadDays, setSpreadDays]   = useState(false);
+  const [earlyPurchase, setEarlyPurchase] = useState(false); // רכישה מוקדמת
   const [filterCur, setFilterCur]     = useState<string | null>(null);
 
   // Category editor state
@@ -351,7 +353,9 @@ export default function ExpensesTab({ trip, onChange }: Props) {
           cur.setDate(cur.getDate() + 1);
         }
       } else {
-        (map[e.date] ??= []).push(e);
+        // Early-purchase: group by useDate when present, otherwise by date
+        const key = (e.useDate && e.useDate > e.date) ? e.useDate : e.date;
+        (map[key] ??= []).push(e);
       }
     });
 
@@ -371,17 +375,18 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   function save() {
     if (!form.description.trim() || form.amount <= 0) return;
     const dateEnd = spreadDays && form.dateEnd && form.dateEnd > form.date ? form.dateEnd : undefined;
+    const useDate = earlyPurchase && form.useDate && form.useDate > form.date ? form.useDate : undefined;
     if (editingId) {
       // Update existing expense
       onChange({
         ...trip,
         expenses: expenses.map(e =>
-          e.id === editingId ? { ...form, id: editingId, dateEnd } : e
+          e.id === editingId ? { ...form, id: editingId, dateEnd, useDate } : e
         ),
       });
     } else {
       // Add new expense
-      const toSave: Expense = { ...form, id: generateId(), dateEnd };
+      const toSave: Expense = { ...form, id: generateId(), dateEnd, useDate };
       onChange({ ...trip, expenses: [...expenses, toSave] });
     }
     setShowModal(false);
@@ -395,6 +400,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   function openModal() {
     setForm(blankForm());
     setSpreadDays(false);
+    setEarlyPurchase(false);
     setEditingId(null);
     setStep('category');
     setShowModal(true);
@@ -408,6 +414,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     setForm({
       date: rest.date,
       dateEnd: rest.dateEnd,
+      useDate: rest.useDate,
       description: rest.description,
       amount: rest.amount,
       currency: rest.currency,
@@ -417,6 +424,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
       paymentMethod: rest.paymentMethod,
     });
     setSpreadDays(!!(rest.dateEnd && rest.dateEnd > rest.date));
+    setEarlyPurchase(!!(rest.useDate && rest.useDate > rest.date));
     setEditingId(exp.id);
     setStep('form');
     setShowModal(true);
@@ -536,6 +544,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                 const dispAmt  = exp._perDay ?? exp.amount;
                 const ilsAmt   = toILS(dispAmt, exp.currency);
                 const showOrig = exp.currency !== 'ILS' || isSpread; // show original if foreign or spread
+                const isEarlyPurchase = !!(exp.useDate && exp.useDate > exp.date);
                 return (
                   <div key={`${exp.id}-${idx}`} className="exp-row" onClick={() => openEdit(exp)}>
                     {/* Icon — rightmost in RTL */}
@@ -547,6 +556,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                       <div className="exp-row-desc-line">
                         <span className="exp-row-desc">{exp.description}</span>
                         {isSpread && <span className="exp-spread-badge">{exp._numDays} ימים</span>}
+                        {isEarlyPurchase && <span className="exp-early-badge">🎟️</span>}
                       </div>
                       <span className="exp-row-sub">
                         {exp.category}
@@ -555,6 +565,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                         {isSpread && exp.dateEnd
                           ? ` • ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
                           : ''}
+                        {isEarlyPurchase ? ` • נקנה ${fmtDateShort(exp.date)}` : ''}
                       </span>
                     </div>
                     {/* Amounts — leftmost in RTL */}
@@ -816,6 +827,33 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                       </span>
                     )}
                   </button>
+
+                  {/* Early-purchase toggle */}
+                  <button
+                    className={`exp-spread-toggle${earlyPurchase ? ' active' : ''}`}
+                    onClick={() => {
+                      setEarlyPurchase(s => !s);
+                      if (earlyPurchase) setForm(f => ({ ...f, useDate: undefined }));
+                    }}>
+                    🎟️ רכישה מוקדמת
+                    {earlyPurchase && form.useDate && form.useDate > form.date && (
+                      <span className="exp-spread-info">
+                        שימוש: {fmtDateShort(form.useDate)}
+                      </span>
+                    )}
+                  </button>
+                  {earlyPurchase && (
+                    <div className="exp-date-row">
+                      <div className="exp-date-field">
+                        <label className="exp-field-label">תאריך שימוש</label>
+                        <input className="exp-field-inp" type="date"
+                          value={form.useDate || ''}
+                          min={form.date}
+                          onChange={e => setForm(f => ({ ...f, useDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Payment method */}
                   <div className="exp-pay-row">

@@ -111,8 +111,9 @@ export interface Stay {
 
 export interface Expense {
   id: string;
-  date: string;
-  dateEnd?: string;          // when set → expense is spread across date..dateEnd
+  date: string;             // purchase / payment date
+  dateEnd?: string;         // when set → expense is spread across date..dateEnd
+  useDate?: string;         // early-purchase: actual use/activity date (for daily grouping)
   description: string;
   amount: number;
   currency: string;
