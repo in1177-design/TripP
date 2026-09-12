@@ -31,6 +31,7 @@ export interface Trip {
   dayBases?: Record<string, string>; // date -> base city name
   coverImage?: string;             // URL for hero background image
   categories?: CustomCategory[];   // user-defined expense categories
+  exchangeRates?: Record<string, number>; // currency → ILS (e.g. { EUR: 4.1, PLN: 0.95 })
 }
 
 export interface Document {

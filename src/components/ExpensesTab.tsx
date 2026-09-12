@@ -229,6 +229,9 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   const [addingCat, setAddingCat]           = useState(false);
   const [editingCatId, setEditingCatId]     = useState<string | null>(null);
 
+  // Exchange rates editor
+  const [showRatesEditor, setShowRatesEditor] = useState(false);
+
   function saveNewCat() {
     if (!newCatForm.name.trim() || !newCatForm.icon.trim()) return;
     if (editingCatId) {
@@ -277,7 +280,40 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     );
   }, [trip.startDate, trip.endDate]);
 
-  const dailyAvg = primaryTotal > 0 ? primaryTotal / tripDays : 0;
+  // dailyAvg kept for potential future per-currency chart use
+  // const dailyAvg = primaryTotal > 0 ? primaryTotal / tripDays : 0;
+
+  // ── ILS conversion ────────────────────────────────────────────
+  // foreignCurs: currencies in expenses that aren't ILS
+  const foreignCurs = useMemo(
+    () => [...new Set(expenses.filter(e => e.currency !== 'ILS').map(e => e.currency))],
+    [expenses]
+  );
+  // are all foreign currencies configured?
+  const ratesReady = foreignCurs.length === 0 ||
+    foreignCurs.every(c => !!(trip.exchangeRates?.[c]));
+  // helper: convert any amount to ILS using stored rates
+  function toILS(amount: number, currency: string): number {
+    if (currency === 'ILS') return amount;
+    return (trip.exchangeRates?.[currency] ?? 0) * amount;
+  }
+  // grand ILS total (all expenses)
+  const totalILS = useMemo(
+    () => expenses.reduce((s, e) => s + (
+      e.currency === 'ILS' ? e.amount : (trip.exchangeRates?.[e.currency] ?? 0) * e.amount
+    ), 0),
+    [expenses, trip.exchangeRates]
+  );
+  const dailyILS = totalILS > 0 && tripDays > 0 ? totalILS / tripDays : 0;
+
+  // update a single exchange rate and save
+  function saveRate(currency: string, value: string) {
+    const num = parseFloat(value);
+    onChange({
+      ...trip,
+      exchangeRates: { ...(trip.exchangeRates || {}), [currency]: isNaN(num) ? 0 : num },
+    });
+  }
 
   // ── Category breakdown (count each expense once)
   const catRows = useMemo(() => {
@@ -384,34 +420,48 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   return (
     <div className="exp-root">
 
-      {/* ── STATS BAR — all currencies always visible ── */}
-      {allCurrencies.length > 0 && (
+      {/* ── GRAND TOTAL BAR (ILS) ── */}
+      {expenses.length > 0 && (
         <div className="exp-stats-bar">
-          {allCurrencies.map((cur, i) => (
-            <button
-              key={cur}
-              className={`exp-stat exp-stat--btn${primaryCur === cur ? ' exp-stat--sel' : ''}`}
-              onClick={() => setFilterCur(cur === filterCur ? null : cur)}
-              title="לחץ לסינון תרשים">
-              <span className="exp-stat-label">סה״כ {cur}</span>
-              <span className="exp-stat-value">
-                {totals[cur].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-              {i < allCurrencies.length - 1 && <span className="exp-stat-sep-inline" />}
-            </button>
-          ))}
-          {dailyAvg > 0 && (
+          {totalILS > 0 ? (
             <>
+              <div className="exp-stat">
+                <span className="exp-stat-label">סה״כ{!ratesReady ? ' (חלקי)' : ''}</span>
+                <span className="exp-stat-value">
+                  <span className="exp-stat-cur">₪</span>
+                  {totalILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
               <div className="exp-stat-sep" />
               <div className="exp-stat">
                 <span className="exp-stat-label">ממוצע יומי</span>
                 <span className="exp-stat-value">
-                  <span className="exp-stat-cur">{primaryCur}</span>{' '}
-                  {dailyAvg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  <span className="exp-stat-cur">₪</span>
+                  {dailyILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
             </>
+          ) : (
+            <div className="exp-stat exp-stat--setup">
+              <span className="exp-stat-label">הגדר שערי חליפין לסיכום בשקלים</span>
+            </div>
           )}
+          <button className="exp-rates-btn" onClick={() => setShowRatesEditor(true)} title="שערי חליפין">
+            ⚙️
+          </button>
+        </div>
+      )}
+
+      {/* ── PER-CURRENCY PILLS (for chart filtering) ── */}
+      {allCurrencies.length > 0 && (
+        <div className="exp-cur-pills">
+          {allCurrencies.map(cur => (
+            <button key={cur}
+              className={`exp-cur-pill${primaryCur === cur ? ' active' : ''}`}
+              onClick={() => setFilterCur(cur === filterCur ? null : cur)}>
+              {cur} · {totals[cur].toFixed(0)}
+            </button>
+          ))}
         </div>
       )}
 
@@ -446,13 +496,19 @@ export default function ExpensesTab({ trip, onChange }: Props) {
         <div className="exp-list">
           {grouped.map(g => (
             <div key={g.date} className="exp-group">
-              <div className="exp-group-hdr">
-                <span className="exp-group-date">{fmtDateHdr(g.date)}</span>
-                <span className="exp-group-tot">
-                  {Object.entries(g.dayTot)
-                    .map(([cur, amt]) => `${amt.toFixed(2)} ${cur}`).join(' · ')}
-                </span>
-              </div>
+              {(() => {
+                const dayILS = Object.entries(g.dayTot).reduce((s, [cur, amt]) => s + toILS(amt, cur), 0);
+                return (
+                  <div className="exp-group-hdr">
+                    <span className="exp-group-date">{fmtDateHdr(g.date)}</span>
+                    <span className="exp-group-tot">
+                      {dayILS > 0
+                        ? `₪ ${dayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                        : Object.entries(g.dayTot).map(([cur, amt]) => `${amt.toFixed(0)} ${cur}`).join(' · ')}
+                    </span>
+                  </div>
+                );
+              })()}
               {g.exps.map((exp, idx) => {
                 const m = getCatMeta(exp.category);
                 const isSpread = !!exp._numDays;
@@ -749,6 +805,42 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── EXCHANGE RATES EDITOR ── */}
+      {showRatesEditor && (
+        <div className="exp-overlay" onClick={() => setShowRatesEditor(false)}>
+          <div className="exp-sheet exp-sheet--rates" onClick={e => e.stopPropagation()}>
+            <div className="exp-sheet-hdr">
+              <button className="exp-sheet-close" onClick={() => setShowRatesEditor(false)}>✕</button>
+              <span className="exp-sheet-title">שערי חליפין → ₪</span>
+              <span />
+            </div>
+            <p className="exp-rates-hint">הכנס כמה שקלים שווה 1 יחידה של כל מטבע</p>
+            <div className="exp-rates-list">
+              {(foreignCurs.length > 0 ? foreignCurs : CURRENCIES.filter(c => c !== 'ILS')).map(cur => (
+                <div key={cur} className="exp-rate-row">
+                  <span className="exp-rate-cur">1 {cur}</span>
+                  <span className="exp-rate-eq">=</span>
+                  <input
+                    className="exp-rate-inp"
+                    type="number" min="0" step="0.01"
+                    placeholder="0.00"
+                    value={trip.exchangeRates?.[cur] || ''}
+                    onChange={e => saveRate(cur, e.target.value)}
+                  />
+                  <span className="exp-rate-ils">₪</span>
+                  {trip.exchangeRates?.[cur] ? (
+                    <span className="exp-rate-check">✓</span>
+                  ) : (
+                    <span className="exp-rate-missing">!</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="exp-rates-tip">💡 שערים נשמרים לנסיעה זו אוטומטית</p>
           </div>
         </div>
       )}
