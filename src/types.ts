@@ -105,6 +105,7 @@ export interface Stay {
 export interface Expense {
   id: string;
   date: string;
+  dateEnd?: string;          // when set → expense is spread across date..dateEnd
   description: string;
   amount: number;
   currency: string;
