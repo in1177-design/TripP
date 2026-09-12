@@ -223,6 +223,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   const [form, setForm]               = useState<Omit<Expense, 'id'>>(blankForm);
   const [spreadDays, setSpreadDays]   = useState(false);
   const [earlyPurchase, setEarlyPurchase] = useState(false); // רכישה מוקדמת
+  const [showNote, setShowNote]           = useState(false);
   const [filterCur, setFilterCur]     = useState<string | null>(null);
 
   // Category editor state
@@ -401,6 +402,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     setForm(blankForm());
     setSpreadDays(false);
     setEarlyPurchase(false);
+    setShowNote(false);
     setEditingId(null);
     setStep('category');
     setShowModal(true);
@@ -425,6 +427,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     });
     setSpreadDays(!!(rest.dateEnd && rest.dateEnd > rest.date));
     setEarlyPurchase(!!(rest.useDate && rest.useDate > rest.date));
+    setShowNote(!!(rest.receiptNote));
     setEditingId(exp.id);
     setStep('form');
     setShowModal(true);
@@ -561,7 +564,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                       <span className="exp-row-sub">
                         {exp.category}
                         {exp.subcategory ? ` • ${exp.subcategory}` : ''}
-                        {exp.paymentMethod ? ` • ${exp.paymentMethod === 'cash' ? 'מזומן' : 'אשראי'}` : ''}
+                        {exp.paymentMethod ? ` • ${{ cash: 'מזומן', card: 'אשראי', online: 'הזמנה אינטרנטית' }[exp.paymentMethod] ?? exp.paymentMethod}` : ''}
                         {isSpread && exp.dateEnd
                           ? ` • ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
                           : ''}
@@ -683,7 +686,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
       {/* ── ADD MODAL ── */}
       {showModal && (
         <div className="exp-overlay" onClick={() => setShowModal(false)}>
-          <div className="exp-sheet" onClick={e => e.stopPropagation()}>
+          <div className={`exp-sheet${step === 'form' ? ' exp-sheet--form' : ''}`} onClick={e => e.stopPropagation()}>
 
             {/* ── STEP 1: CATEGORY PICKER ── */}
             {step === 'category' && (
@@ -720,6 +723,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
             {/* ── STEP 2: FORM ── */}
             {step === 'form' && (
               <>
+                {/* Header */}
                 <div className="exp-sheet-hdr">
                   <button className="exp-sheet-close"
                     onClick={() => editingId ? setShowModal(false) : setStep('category')}
@@ -727,155 +731,168 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                     {editingId ? '✕' : '←'}
                   </button>
                   <span className="exp-sheet-title">{editingId ? 'עריכת הוצאה' : 'הוצאה חדשה'}</span>
-                  <button className="btn-primary btn-sm" onClick={save}
-                    disabled={!form.description.trim() || form.amount <= 0}>
-                    שמור
-                  </button>
+                  {editingId
+                    ? <button className="exp-sheet-close exp-sheet-del"
+                        onClick={() => { remove(editingId); setShowModal(false); setEditingId(null); }}>🗑️</button>
+                    : <span style={{ width: 28 }} />
+                  }
                 </div>
 
-                {/* Amount + currency */}
-                <div className="exp-sheet-amount">
-                  <div className="exp-icon-circle exp-icon-circle--lg" style={{ background: getCatMeta(form.category).color }}>
-                    <CatIcon cat={form.category} size={22} fallback={getCatMeta(form.category).icon} />
+                {/* Scrollable content */}
+                <div className="exp-form-scroll">
+
+                  {/* Amount + currency — LTR row: currency left, amount right */}
+                  <div className="exp-form-amount-row">
+                    <select className="exp-cur-big"
+                      value={form.currency}
+                      onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+                      {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                    <input
+                      className="exp-amount-big"
+                      type="number" min="0" step="0.01"
+                      placeholder="0"
+                      value={form.amount || ''}
+                      autoFocus
+                      onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))}
+                    />
                   </div>
-                  <input
-                    className="exp-amount-inp"
-                    type="number" min="0" step="0.01"
-                    placeholder="0.00"
-                    value={form.amount || ''}
-                    autoFocus
-                    onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))}
-                  />
-                  <select className="exp-cur-sel"
-                    value={form.currency}
-                    onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
-                    {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
 
-                {/* Category label (clickable to go back) */}
-                <button className="exp-cat-label-btn" onClick={() => setStep('category')}>
-                  <span className="exp-cat-label-dot" style={{ background: getCatMeta(form.category).color }} />
-                  {form.category}
-                  <span className="exp-cat-label-change">שנה ›</span>
-                </button>
+                  {/* Category + subcategory */}
+                  <div className="exp-form-cat-row">
+                    <span className="exp-form-cat-dot" style={{ background: getCatMeta(form.category).color }} />
+                    <CatIcon cat={form.category} size={16} color={getCatMeta(form.category).color} fallback={getCatMeta(form.category).icon} />
+                    <button className="exp-form-cat-name" onClick={() => setStep('category')}>
+                      {form.category} ›
+                    </button>
+                    {(() => {
+                      const customCatObj = customCats.find(c => c.name === form.category);
+                      const opts = customCatObj?.subcats?.length ? customCatObj.subcats : (SUBCATS[form.category] ?? []);
+                      if (!opts.length) return null;
+                      return (
+                        <select className="exp-form-subcat"
+                          value={form.subcategory || ''}
+                          onChange={e => setForm(f => ({ ...f, subcategory: e.target.value || undefined }))}>
+                          <option value="">— תת-קטגוריה —</option>
+                          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      );
+                    })()}
+                  </div>
 
-                {/* Subcategory dropdown */}
-                {(() => {
-                  const customCatObj = customCats.find(c => c.name === form.category);
-                  const opts = customCatObj?.subcats?.length
-                    ? customCatObj.subcats
-                    : (SUBCATS[form.category] ?? []);
-                  if (opts.length === 0) return null;
-                  return (
-                    <div className="exp-subcat-wrap">
-                      <select
-                        className="exp-subcat-sel"
-                        value={form.subcategory || ''}
-                        onChange={e => setForm(f => ({ ...f, subcategory: e.target.value || undefined }))}
-                      >
-                        <option value="">— תת-קטגוריה —</option>
-                        {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
+                  {/* Description + note toggle */}
+                  <div className="exp-form-desc-row">
+                    <input className="exp-form-desc-inp"
+                      placeholder="תיאור — מה שילמת?"
+                      value={form.description}
+                      onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    />
+                    <button
+                      className={`exp-form-desc-plus${showNote ? ' active' : ''}`}
+                      onClick={() => setShowNote(s => !s)}
+                      title="הוסף הערה">
+                      {showNote ? '−' : '+'}
+                    </button>
+                  </div>
+                  {showNote && (
+                    <div className="exp-form-note-row">
+                      <input className="exp-form-note-inp"
+                        placeholder="הערה / מספר קבלה"
+                        value={form.receiptNote || ''}
+                        onChange={e => setForm(f => ({ ...f, receiptNote: e.target.value || undefined }))}
+                      />
                     </div>
-                  );
-                })()}
+                  )}
 
-                {/* Fields */}
-                <div className="exp-sheet-fields">
-                  <input className="exp-field-inp"
-                    placeholder="תיאור — מה שילמת?"
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  />
+                  {/* Date mode toggle + early-purchase checkbox */}
+                  <div className="exp-form-date-ctrl">
+                    <div className="exp-form-date-toggle">
+                      <button
+                        className={`exp-form-date-tab${!spreadDays ? ' active' : ''}`}
+                        onClick={() => { setSpreadDays(false); setForm(f => ({ ...f, dateEnd: undefined })); }}>
+                        תאריך
+                      </button>
+                      <button
+                        className={`exp-form-date-tab${spreadDays ? ' active' : ''}`}
+                        onClick={() => setSpreadDays(true)}>
+                        טווח תאריכים
+                      </button>
+                    </div>
+                    <label className="exp-form-early-check">
+                      <input type="checkbox" checked={earlyPurchase}
+                        onChange={e => {
+                          setEarlyPurchase(e.target.checked);
+                          if (!e.target.checked) setForm(f => ({ ...f, useDate: undefined }));
+                        }}
+                      />
+                      <span>רכישה מוקדמת</span>
+                    </label>
+                  </div>
 
-                  {/* Date(s) */}
-                  <div className="exp-date-row">
-                    <div className="exp-date-field">
+                  {/* Date inputs */}
+                  <div className="exp-form-date-inputs">
+                    <div className="exp-form-date-field">
                       <label className="exp-field-label">{spreadDays ? 'מתאריך' : 'תאריך'}</label>
-                      <input className="exp-field-inp" type="date"
+                      <input className="exp-form-date-inp" type="date"
                         value={form.date}
                         onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                       />
                     </div>
                     {spreadDays && (
-                      <div className="exp-date-field">
+                      <div className="exp-form-date-field">
                         <label className="exp-field-label">עד תאריך</label>
-                        <input className="exp-field-inp" type="date"
+                        <input className="exp-form-date-inp" type="date"
                           value={form.dateEnd || ''}
                           min={form.date}
                           onChange={e => setForm(f => ({ ...f, dateEnd: e.target.value }))}
                         />
                       </div>
                     )}
-                  </div>
-
-                  {/* Spread toggle */}
-                  <button
-                    className={`exp-spread-toggle${spreadDays ? ' active' : ''}`}
-                    onClick={() => {
-                      setSpreadDays(s => !s);
-                      if (spreadDays) setForm(f => ({ ...f, dateEnd: undefined }));
-                    }}>
-                    📅 פרוס על מספר ימים
-                    {spreadDays && form.dateEnd && form.dateEnd > form.date && (
-                      <span className="exp-spread-info">
-                        {daysBetween(form.date, form.dateEnd) + 1} ימים ·{' '}
-                        {form.amount > 0
-                          ? `${(form.amount / (daysBetween(form.date, form.dateEnd) + 1)).toFixed(2)} ${form.currency}/יום`
-                          : ''}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Early-purchase toggle */}
-                  <button
-                    className={`exp-spread-toggle${earlyPurchase ? ' active' : ''}`}
-                    onClick={() => {
-                      setEarlyPurchase(s => !s);
-                      if (earlyPurchase) setForm(f => ({ ...f, useDate: undefined }));
-                    }}>
-                    🎟️ רכישה מוקדמת
-                    {earlyPurchase && form.useDate && form.useDate > form.date && (
-                      <span className="exp-spread-info">
-                        שימוש: {fmtDateShort(form.useDate)}
-                      </span>
-                    )}
-                  </button>
-                  {earlyPurchase && (
-                    <div className="exp-date-row">
-                      <div className="exp-date-field">
+                    {earlyPurchase && (
+                      <div className="exp-form-date-field">
                         <label className="exp-field-label">תאריך שימוש</label>
-                        <input className="exp-field-inp" type="date"
+                        <input className="exp-form-date-inp" type="date"
                           value={form.useDate || ''}
                           min={form.date}
                           onChange={e => setForm(f => ({ ...f, useDate: e.target.value }))}
                         />
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {spreadDays && form.dateEnd && form.dateEnd > form.date && form.amount > 0 && (
+                      <span className="exp-spread-info-row">
+                        {daysBetween(form.date, form.dateEnd) + 1} ימים · {(form.amount / (daysBetween(form.date, form.dateEnd) + 1)).toFixed(2)} {form.currency}/יום
+                      </span>
+                    )}
+                  </div>
 
                   {/* Payment method */}
-                  <div className="exp-pay-row">
-                    {[
-                      { k: 'cash' as const, label: '💵 מזומן' },
-                      { k: 'card' as const, label: '💳 אשראי' },
-                    ].map(({ k, label }) => (
+                  <div className="exp-form-pay-row">
+                    {([
+                      { k: 'cash' as const, label: 'מזומן' },
+                      { k: 'card' as const, label: 'אשרא' },
+                    ] as const).map(({ k, label }) => (
                       <button key={k}
-                        className={`exp-pay-chip${form.paymentMethod === k ? ' active' : ''}`}
+                        className={`exp-form-pay-chip${form.paymentMethod === k ? ' active' : ''}`}
                         onClick={() => setForm(f => ({ ...f, paymentMethod: k }))}>
                         {label}
                       </button>
                     ))}
+                    <button
+                      className={`exp-form-pay-online${form.paymentMethod === 'online' ? ' active' : ''}`}
+                      onClick={() => setForm(f => ({ ...f, paymentMethod: f.paymentMethod === 'online' ? 'cash' : 'online' }))}>
+                      הזמנה אינטרנטית ›
+                    </button>
                   </div>
-                </div>
-                {/* Delete button — only when editing existing expense */}
-                {editingId && (
-                  <button className="exp-delete-full"
-                    onClick={() => { remove(editingId); setShowModal(false); setEditingId(null); }}>
-                    🗑️ מחק הוצאה
+
+                </div>{/* end exp-form-scroll */}
+
+                {/* Save — sticky at bottom */}
+                <div className="exp-form-save-wrap">
+                  <button className="exp-form-save-btn" onClick={save}
+                    disabled={!form.description.trim() || form.amount <= 0}>
+                    שמור הוצאה
                   </button>
-                )}
+                </div>
               </>
             )}
           </div>

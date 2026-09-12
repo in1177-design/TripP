@@ -1089,6 +1089,177 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   font-size: 10px; color: var(--ink-muted); text-align: right;
 }
 
+/* ── Redesigned form step ── */
+.exp-sheet--form {
+  display: flex; flex-direction: column; max-height: 92vh; overflow: hidden;
+}
+.exp-form-scroll {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+
+/* Amount row — force LTR so flex:1 works correctly */
+.exp-form-amount-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--border);
+  direction: ltr;          /* prevent RTL from collapsing the input */
+}
+.exp-amount-big {
+  flex: 1 1 0px; width: 0; font-size: 52px; font-weight: 800; letter-spacing: -2px;
+  border: none; background: none; color: var(--ink);
+  font-family: inherit; min-width: 0;
+  direction: ltr; text-align: left;
+}
+.exp-amount-big::placeholder { color: #bbb; }
+.exp-amount-big:focus { outline: none; }
+.exp-amount-big::-webkit-inner-spin-button,
+.exp-amount-big::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.exp-amount-big[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.exp-cur-big {
+  font-size: 14px; font-weight: 700; flex: 0 0 auto;
+  width: 80px; max-width: 80px;
+  border: 1.5px solid var(--border-mid); border-radius: 9px;
+  padding: 7px 10px; background: var(--surface2); color: var(--ink);
+  font-family: inherit; cursor: pointer;
+}
+
+/* Category row */
+.exp-form-cat-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border);
+}
+.exp-form-cat-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.exp-form-cat-name {
+  font-size: 15px; font-weight: 700;
+  background: none; border: none; cursor: pointer;
+  color: var(--ink); padding: 0; font-family: inherit;
+  flex-shrink: 0; white-space: nowrap;
+}
+.exp-form-subcat {
+  flex: 1; min-width: 0; font-size: 13px; font-family: inherit;
+  border: none; background: none; color: var(--ink-muted);
+  cursor: pointer; appearance: none; direction: rtl;
+}
+.exp-form-subcat:focus { outline: none; }
+
+/* Description row */
+.exp-form-desc-row {
+  display: flex; align-items: center;
+  padding: 14px 24px; border-bottom: 1px solid var(--border); gap: 10px;
+}
+.exp-form-desc-inp {
+  flex: 1; font-size: 15px; font-family: inherit;
+  border: none; background: none; color: var(--ink);
+  direction: rtl; min-width: 0;
+}
+.exp-form-desc-inp::placeholder { color: var(--ink-muted); }
+.exp-form-desc-inp:focus { outline: none; }
+.exp-form-desc-plus {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1.5px solid var(--border-mid); background: none;
+  font-size: 20px; line-height: 1; color: var(--ink-muted);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-family: inherit; transition: all .15s;
+}
+.exp-form-desc-plus.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
+.exp-form-note-row { padding: 0 24px 12px; border-bottom: 1px solid var(--border); }
+.exp-form-note-inp {
+  width: 100%; font-size: 13px; font-family: inherit;
+  border: 1.5px solid var(--border-mid); border-radius: 8px;
+  padding: 9px 12px; background: var(--surface2); color: var(--ink);
+  direction: rtl; box-sizing: border-box;
+}
+.exp-form-note-inp:focus { outline: none; border-color: var(--ink); }
+
+/* Date control row */
+.exp-form-date-ctrl {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-bottom: 1px solid var(--border); gap: 8px;
+}
+.exp-form-date-toggle {
+  display: flex; background: var(--surface2);
+  border-radius: 8px; padding: 3px; gap: 2px;
+}
+.exp-form-date-tab {
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  padding: 5px 11px; border: none; background: none;
+  border-radius: 6px; cursor: pointer; color: var(--ink-muted);
+  white-space: nowrap; transition: all .15s;
+}
+.exp-form-date-tab.active { background: var(--dark); color: var(--yellow); }
+.exp-form-early-check {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  cursor: pointer; white-space: nowrap; user-select: none;
+}
+.exp-form-early-check input[type="checkbox"] {
+  width: 17px; height: 17px; accent-color: var(--dark);
+  cursor: pointer; flex-shrink: 0;
+}
+
+/* Date inputs */
+.exp-form-date-inputs {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border);
+}
+.exp-form-date-field {
+  flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 5px;
+}
+.exp-form-date-inp {
+  width: 100%; font-size: 14px; font-family: inherit;
+  border: 1.5px solid var(--border-mid); border-radius: 9px;
+  padding: 9px 12px; background: var(--surface2); color: var(--ink);
+  box-sizing: border-box; direction: ltr;
+}
+.exp-form-date-inp:focus { outline: none; border-color: var(--ink); }
+.exp-spread-info-row {
+  width: 100%; font-size: 12px; color: var(--ink-muted); font-weight: 600;
+  padding: 2px 2px 0;
+}
+
+/* Payment row */
+.exp-form-pay-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border);
+}
+.exp-form-pay-chip {
+  padding: 8px 18px; font-size: 14px; font-weight: 600;
+  border: 1.5px solid var(--border-mid); border-radius: 9px;
+  background: none; cursor: pointer; color: var(--ink);
+  font-family: inherit; transition: all .15s; white-space: nowrap;
+}
+.exp-form-pay-chip.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
+.exp-form-pay-online {
+  flex: 1; font-size: 13px; font-weight: 600; font-family: inherit;
+  border: 1.5px solid var(--border-mid); border-radius: 9px;
+  padding: 8px 12px; background: none; color: var(--ink-muted);
+  cursor: pointer; text-align: start; transition: all .15s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exp-form-pay-online.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
+
+/* Delete icon in header */
+.exp-sheet-del { font-size: 16px; }
+
+/* Save button */
+.exp-form-save-wrap {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.exp-form-save-btn {
+  width: 100%; padding: 15px;
+  background: var(--dark); color: var(--yellow);
+  border: none; border-radius: 13px;
+  font-size: 16px; font-weight: 800; font-family: inherit;
+  cursor: pointer; transition: opacity .15s;
+}
+.exp-form-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.exp-form-save-btn:not(:disabled):active { opacity: 0.82; }
+
 /* ============================================================
    JOURNAL
    ============================================================ */

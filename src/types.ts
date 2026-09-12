@@ -120,7 +120,7 @@ export interface Expense {
   category: ExpenseCategory;
   subcategory?: string;
   receiptNote?: string;
-  paymentMethod?: 'cash' | 'card';
+  paymentMethod?: 'cash' | 'card' | 'online';
 }
 
 export interface JournalEntry {
