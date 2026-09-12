@@ -232,6 +232,9 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   // Exchange rates editor
   const [showRatesEditor, setShowRatesEditor] = useState(false);
 
+  // Sub-tab: 'list' | 'stats'
+  const [subTab, setSubTab] = useState<'list' | 'stats'>('list');
+
   function saveNewCat() {
     if (!newCatForm.name.trim() || !newCatForm.icon.trim()) return;
     if (editingCatId) {
@@ -315,18 +318,21 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     });
   }
 
-  // ── Category breakdown (count each expense once)
-  const catRows = useMemo(() => {
+  // ── Category breakdown — ALL expenses converted to ILS
+  const catRowsILS = useMemo(() => {
     const t: Record<string, number> = {};
-    primaryExpenses.forEach(e => { t[e.category] = (t[e.category] || 0) + e.amount; });
+    expenses.forEach(e => {
+      const ils = e.currency === 'ILS' ? e.amount : (trip.exchangeRates?.[e.currency] ?? 0) * e.amount;
+      if (ils > 0) t[e.category] = (t[e.category] || 0) + ils;
+    });
     return Object.entries(t)
       .sort((a, b) => b[1] - a[1])
       .map(([cat, amt]) => ({
         cat, amt,
-        pct: primaryTotal > 0 ? amt / primaryTotal * 100 : 0,
+        pct: totalILS > 0 ? amt / totalILS * 100 : 0,
         ...getCat(cat),
       }));
-  }, [primaryExpenses, primaryTotal]);
+  }, [expenses, trip.exchangeRates, totalILS]);
 
   // ── Group by date — spread expenses appear on EACH day with per-day amount
   const grouped = useMemo(() => {
@@ -452,41 +458,55 @@ export default function ExpensesTab({ trip, onChange }: Props) {
         </div>
       )}
 
-      {/* ── PER-CURRENCY PILLS (for chart filtering) ── */}
-      {allCurrencies.length > 0 && (
-        <div className="exp-cur-pills">
-          {allCurrencies.map(cur => (
-            <button key={cur}
-              className={`exp-cur-pill${primaryCur === cur ? ' active' : ''}`}
-              onClick={() => setFilterCur(cur === filterCur ? null : cur)}>
-              {cur} · {totals[cur].toFixed(0)}
-            </button>
-          ))}
+      {/* ── SUB-TAB NAV ── */}
+      {expenses.length > 0 && (
+        <div className="exp-subtab-nav">
+          <button
+            className={`exp-subtab-btn${subTab === 'list' ? ' active' : ''}`}
+            onClick={() => setSubTab('list')}>
+            הוצאות
+          </button>
+          <button
+            className={`exp-subtab-btn${subTab === 'stats' ? ' active' : ''}`}
+            onClick={() => setSubTab('stats')}>
+            סטטיסטיקות
+          </button>
         </div>
       )}
 
-      {/* ── CHART ── */}
-      {catRows.length > 0 && (
-        <div className="exp-chart-card">
-          <div className="exp-donut-wrap">
-            <DonutChart slices={catRows.map(c => ({ color: c.color, amount: c.amt }))} />
-          </div>
-          <div className="exp-cat-breakdown">
-            {catRows.map(c => (
-              <div key={c.cat} className="exp-cat-brow">
-                <span className="exp-cat-bdot" style={{ background: c.color }} />
-                <CatIcon cat={c.cat} size={14} color={c.color} fallback={c.icon} />
-                <span className="exp-cat-blabel">{c.cat}</span>
-                <span className="exp-cat-bpct">{c.pct.toFixed(0)}%</span>
-                <span className="exp-cat-bamt">{c.amt.toFixed(0)}</span>
+      {/* ── STATS SUB-TAB: donut chart + category breakdown ── */}
+      {subTab === 'stats' && (
+        <>
+          {catRowsILS.length > 0 ? (
+            <div className="exp-chart-card">
+              <div className="exp-donut-wrap">
+                <DonutChart slices={catRowsILS.map(c => ({ color: c.color, amount: c.amt }))} />
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="exp-cat-breakdown">
+                {catRowsILS.map(c => (
+                  <div key={c.cat} className="exp-cat-brow">
+                    <span className="exp-cat-bdot" style={{ background: c.color }} />
+                    <CatIcon cat={c.cat} size={14} color={c.color} fallback={c.icon} />
+                    <span className="exp-cat-blabel">{c.cat}</span>
+                    <span className="exp-cat-bpct">{c.pct.toFixed(0)}%</span>
+                    <span className="exp-cat-bamt">₪{c.amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="exp-stats-empty">
+              <p>הגדר שערי חליפין כדי לראות התפלגות בשקלים</p>
+              <button className="exp-rates-btn-big" onClick={() => setShowRatesEditor(true)}>
+                ⚙️ הגדרת שערים
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── EXPENSE LIST ── */}
-      {grouped.length === 0 ? (
+      {subTab === 'list' && (grouped.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">💳</div>
           <p>אין הוצאות עדיין</p>
@@ -561,7 +581,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
             </div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* ── FAB ── */}
       <button className="exp-fab" onClick={openModal} aria-label="הוסף הוצאה">+</button>
