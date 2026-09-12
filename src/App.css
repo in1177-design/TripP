@@ -766,6 +766,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--surface); z-index: 1;
+  flex-shrink: 0;
 }
 .exp-sheet-title { font-size: 16px; font-weight: 800; }
 .exp-sheet-close {
@@ -787,10 +788,16 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .exp-amount-inp:focus { outline: none; border-bottom-color: var(--ink); }
 .exp-cur-sel { width: auto; padding: 7px 10px; font-size: 14px; font-weight: 700; }
 
-/* Category picker grid */
+/* Category picker grid — step 1 (full-screen pick mode) */
 .exp-cat-grid {
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 6px; padding: 4px 20px 14px;
+}
+/* Full-height pick grid — 4 cols, bigger tiles */
+.exp-cat-grid--pick {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px; padding: 8px 18px 24px;
+  overflow-y: auto;
 }
 .exp-cat-tile {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -800,14 +807,131 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 .exp-cat-tile:hover { background: var(--surface2); }
 .exp-cat-tile.active { background: var(--surface2); }
+/* Big tile variant (step 1) */
+.exp-cat-tile--big {
+  padding: 12px 4px;
+  border-radius: 14px;
+  transition: background .12s, transform .1s;
+}
+.exp-cat-tile--big:hover { background: var(--surface2); transform: scale(1.05); }
+.exp-cat-tile--big:active { transform: scale(.97); }
 .exp-cat-tile-circle {
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--surface3);
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; transition: background .15s;
 }
+/* Big circle variant */
+.exp-cat-tile-circle--big {
+  width: 54px; height: 54px; font-size: 26px;
+}
 .exp-cat-tile span { font-size: 10.5px; color: var(--ink-muted); font-weight: 600; }
 .exp-cat-tile.active span { color: var(--ink); font-weight: 700; }
+.exp-cat-tile--big span { font-size: 11px; font-weight: 700; color: var(--ink); margin-top: 2px; }
+
+/* Category label button (step 2 — shows chosen category, tap to go back) */
+.exp-cat-label-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: right; dir: rtl;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px;
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ink);
+  cursor: pointer; margin: 0 0 2px; transition: background .15s;
+}
+.exp-cat-label-btn:hover { background: var(--surface3); }
+.exp-cat-label-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.exp-cat-label-change {
+  margin-right: auto; font-size: 12px; color: var(--ink-muted); font-weight: 500;
+}
+
+/* Subcategory dropdown */
+.exp-subcat-wrap {
+  padding: 0 20px 4px;
+}
+.exp-subcat-sel {
+  width: 100%; padding: 11px 14px;
+  border: 1.5px solid var(--border-mid); border-radius: var(--radius-sm);
+  font-size: 14px; font-family: inherit; color: var(--ink);
+  background: var(--surface2); appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 14px center;
+  cursor: pointer;
+}
+.exp-subcat-sel:focus { outline: none; border-color: var(--ink); }
+
+/* Category manager button (in step-1 header) */
+.exp-cat-mgr-btn {
+  background: none; border: none; font-size: 13px; font-weight: 600;
+  color: var(--ink-muted); cursor: pointer; padding: 4px 8px;
+  font-family: inherit; border-radius: 8px; transition: background .15s;
+}
+.exp-cat-mgr-btn:hover { background: var(--surface2); color: var(--ink); }
+
+/* Taller sheet for category editor — internal flex layout so list scrolls, form sticks */
+.exp-sheet--tall {
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  overflow: hidden; /* prevent outer scroll; inner list scrolls */
+}
+
+/* Category list — grows and scrolls internally */
+.exp-catlist {
+  overflow-y: auto; flex: 1;
+  padding: 0 20px 16px;
+}
+.exp-catlist-section {
+  font-size: 11px; font-weight: 700; color: var(--ink-muted); letter-spacing: .5px;
+  text-transform: uppercase; padding: 10px 0 6px;
+}
+.exp-catlist-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.exp-catlist-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.exp-catlist-name { flex: 1; font-size: 15px; font-weight: 600; color: var(--ink); }
+.exp-catlist-lock { font-size: 13px; color: var(--ink-subtle); }
+.exp-catlist-actions { display: flex; gap: 4px; }
+.exp-catlist-btn {
+  background: none; border: none; font-size: 16px; cursor: pointer;
+  padding: 4px 6px; border-radius: 8px; transition: background .15s;
+}
+.exp-catlist-btn:hover { background: var(--surface2); }
+.exp-catlist-btn--del:hover { background: #ffeaea; }
+
+/* Add / Edit category form — sticks to bottom of the sheet */
+.exp-cat-add-form {
+  border-top: 1px solid var(--border);
+  padding: 16px 20px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  flex-shrink: 0; /* don't allow it to collapse */
+  background: var(--surface);
+}
+.exp-cat-add-row { display: flex; gap: 10px; align-items: center; }
+.exp-cat-emoji-inp {
+  width: 52px; height: 44px; border: 1.5px solid var(--border-mid);
+  border-radius: 10px; font-size: 22px; text-align: center;
+  background: var(--surface2); font-family: inherit; flex-shrink: 0;
+}
+.exp-cat-name-inp { flex: 1; }
+.exp-color-palette {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0;
+}
+.exp-color-swatch {
+  width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent;
+  cursor: pointer; transition: transform .1s, border-color .1s;
+}
+.exp-color-swatch:hover { transform: scale(1.15); }
+.exp-color-swatch.active { border-color: var(--ink); transform: scale(1.15); }
+.exp-cat-add-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+}
 
 /* Fields below picker */
 .exp-sheet-fields { display: flex; flex-direction: column; gap: 10px; padding: 0 20px 24px; }

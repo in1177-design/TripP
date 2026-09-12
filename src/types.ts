@@ -1,10 +1,15 @@
 export type TripStyle = 'תרבות' | 'טבע' | 'עיר' | 'חוף' | 'הרפתקאות' | 'קולינריה' | 'משפחה';
 export type Priority = 'חובה' | 'רוצה' | 'אולי';
 export type PlaceType = 'אטרקציה' | 'מסעדה' | 'קפה' | 'מוזיאון' | 'שוק' | 'פארק' | 'שכונה' | 'אחר';
-export type ExpenseCategory =
-  'מסעדות' | 'תחבורה' | 'לינה' | 'קניות' | 'פעילויות' | 'שתייה' | 'קפה' |
-  'טיסות' | 'כללי' | 'סיור' | 'בידור' | 'כביסה' | 'כניסות' |
-  'אוכל' | 'אחר'; // 'אוכל'/'כניסות' are legacy aliases kept for Firestore compat
+export type ExpenseCategory = string; // open string — built-ins listed in ExpensesTab; custom categories stored in trip.categories
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  icon: string;   // emoji
+  color: string;  // hex
+  subcats?: string[]; // user-defined subcategories
+}
 
 export interface Trip {
   id: string;
@@ -25,6 +30,7 @@ export interface Trip {
   itinerary?: ItineraryItem[];
   dayBases?: Record<string, string>; // date -> base city name
   coverImage?: string;             // URL for hero background image
+  categories?: CustomCategory[];   // user-defined expense categories
 }
 
 export interface Document {
@@ -110,6 +116,7 @@ export interface Expense {
   amount: number;
   currency: string;
   category: ExpenseCategory;
+  subcategory?: string;
   receiptNote?: string;
   paymentMethod?: 'cash' | 'card';
 }
