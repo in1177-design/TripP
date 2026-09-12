@@ -238,12 +238,23 @@ export default function PlacesTab({ trip, onChange }: Props) {
     const searchName = form.nameEn?.trim() || form.nameHe.trim();
     if (!searchName) return;
     setAiLoading(true); setAiError('');
+    // Kick off image search in parallel (don't wait for it to finish first)
+    setImgSearching(true); setImgResults([]);
+    searchImages(searchName).then(imgs => {
+      setImgResults(imgs); setImgSearching(false);
+    });
     try {
       // Pass English (or whatever was typed) as the primary search term, Hebrew as hint
       const result = await enrichPlace(searchName, trip.destination, form.nameHe.trim() || undefined);
       // Fill in nameHe from AI if we searched by English and nameHe was empty
       if (!form.nameHe.trim() && result.nameHe) {
         setForm(f => ({ ...f, ...result, nameHe: result.nameHe ?? f.nameHe }));
+        // If name was missing, re-search images with the now-known English name
+        if (result.nameEn) {
+          searchImages(result.nameEn).then(imgs => {
+            setImgResults(prev => [...new Set([...imgs, ...prev])]);
+          });
+        }
       } else {
         setForm(f => ({ ...f, ...result }));
       }
