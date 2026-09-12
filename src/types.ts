@@ -1,7 +1,10 @@
 export type TripStyle = 'תרבות' | 'טבע' | 'עיר' | 'חוף' | 'הרפתקאות' | 'קולינריה' | 'משפחה';
 export type Priority = 'חובה' | 'רוצה' | 'אולי';
 export type PlaceType = 'אטרקציה' | 'מסעדה' | 'קפה' | 'מוזיאון' | 'שוק' | 'פארק' | 'שכונה' | 'אחר';
-export type ExpenseCategory = 'אוכל' | 'תחבורה' | 'כניסות' | 'קניות' | 'לינה' | 'אחר';
+export type ExpenseCategory =
+  'מסעדות' | 'תחבורה' | 'לינה' | 'קניות' | 'פעילויות' | 'שתייה' | 'קפה' |
+  'טיסות' | 'כללי' | 'סיור' | 'בידור' | 'כביסה' | 'כניסות' |
+  'אוכל' | 'אחר'; // 'אוכל'/'כניסות' are legacy aliases kept for Firestore compat
 
 export interface Trip {
   id: string;
@@ -107,6 +110,7 @@ export interface Expense {
   currency: string;
   category: ExpenseCategory;
   receiptNote?: string;
+  paymentMethod?: 'cash' | 'card';
 }
 
 export interface JournalEntry {

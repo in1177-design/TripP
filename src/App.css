@@ -661,30 +661,173 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .pill-remove:hover { color: var(--danger); }
 
 /* ============================================================
-   EXPENSES
+   EXPENSES — TravelSpend-style
    ============================================================ */
-.total-chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.total-chip {
-  background: var(--dark); color: var(--yellow);
-  border-radius: 99px; padding: 5px 16px; font-size: 13px; font-weight: 700;
+.exp-root { padding-bottom: 88px; position: relative; }
+
+/* ── Stats bar ── */
+.exp-stats-bar {
+  display: flex; background: var(--dark); border-radius: var(--radius);
+  margin-bottom: 14px; overflow: hidden;
 }
-.cat-summary {
+.exp-stat { flex: 1; display: flex; flex-direction: column; padding: 18px 22px; }
+.exp-stat-sep { width: 1px; background: rgba(255,255,255,.1); margin: 14px 0; }
+.exp-stat-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: rgba(255,255,255,.42); margin-bottom: 6px;
+}
+.exp-stat-value { font-size: 21px; font-weight: 800; color: #fff; letter-spacing: -.4px; }
+.exp-stat-cur { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.55); margin-left: 3px; }
+
+/* ── Currency filter ── */
+.exp-cur-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.exp-cur-pill {
+  background: var(--surface2); border: 1.5px solid var(--border-mid);
+  border-radius: 99px; padding: 5px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; color: var(--ink-muted); transition: all .15s;
+}
+.exp-cur-pill.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
+
+/* ── Chart card ── */
+.exp-chart-card {
+  display: flex; gap: 14px; align-items: center;
   background: var(--surface); border: 1.5px solid var(--border-mid);
   border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
-  display: flex; flex-direction: column; gap: 8px;
 }
-.cat-row { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-muted); }
-.expenses-list { display: flex; flex-direction: column; gap: 8px; }
-.expense-row {
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm); padding: 12px 16px;
-  display: flex; align-items: center; gap: 12px;
+.exp-donut-wrap { width: 120px; flex-shrink: 0; }
+.exp-donut-svg  { width: 100%; height: auto; display: block; }
+.exp-cat-breakdown { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.exp-cat-brow { display: flex; align-items: center; gap: 7px; }
+.exp-cat-bdot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.exp-cat-bicon { font-size: 13px; }
+.exp-cat-blabel{ flex: 1; font-size: 13px; font-weight: 500; }
+.exp-cat-bpct  { font-size: 12px; color: var(--ink-muted); min-width: 28px; text-align: right; }
+.exp-cat-bamt  { font-size: 13px; font-weight: 700; min-width: 46px; text-align: right; }
+
+/* ── Expense list ── */
+.exp-list { display: flex; flex-direction: column; gap: 0; }
+.exp-group { margin-bottom: 6px; }
+.exp-group-hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 2px 5px; font-size: 13px;
 }
-.exp-icon { font-size: 20px; }
-.exp-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.exp-desc { font-weight: 700; font-size: 14px; }
-.exp-date, .exp-receipt { font-size: 12px; color: var(--ink-muted); }
-.exp-amount { font-weight: 800; color: var(--cat-activity); white-space: nowrap; font-size: 15px; }
+.exp-group-date { color: var(--ink-muted); font-weight: 600; }
+.exp-group-tot  { color: var(--ink); font-weight: 700; font-size: 13px; }
+
+.exp-row {
+  display: flex; align-items: center; gap: 11px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 5px;
+}
+.exp-icon-circle {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.exp-icon-circle--lg { width: 52px; height: 52px; font-size: 24px; }
+.exp-row-body { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.exp-row-desc { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exp-row-sub  { font-size: 12px; color: var(--ink-muted); }
+.exp-row-end  { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; margin-left: 4px; }
+.exp-row-amt  { font-weight: 800; font-size: 14px; white-space: nowrap; }
+.exp-row-cur  { font-size: 11px; color: var(--ink-muted); }
+.exp-del {
+  background: none; border: none; cursor: pointer; color: var(--ink-subtle);
+  font-size: 20px; line-height: 1; padding: 0 0 0 4px;
+  transition: color .15s; flex-shrink: 0;
+}
+.exp-del:hover { color: var(--danger); }
+
+/* ── FAB ── */
+.exp-fab {
+  position: fixed; bottom: 26px; right: 26px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--dark); color: var(--yellow);
+  border: none; cursor: pointer; font-size: 30px; font-weight: 300;
+  box-shadow: 0 4px 20px rgba(0,0,0,.28);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 90; line-height: 1;
+  transition: transform .15s, box-shadow .15s;
+}
+.exp-fab:hover  { transform: scale(1.08); box-shadow: 0 6px 24px rgba(0,0,0,.38); }
+.exp-fab:active { transform: scale(.94); }
+
+/* ── Add-expense bottom sheet ── */
+.exp-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.52);
+  z-index: 500; display: flex; align-items: flex-end;
+  backdrop-filter: blur(2px);
+}
+.exp-sheet {
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  width: 100%; max-height: 92vh; overflow-y: auto;
+  box-shadow: 0 -8px 40px rgba(0,0,0,.22);
+}
+.exp-sheet-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+.exp-sheet-title { font-size: 16px; font-weight: 800; }
+.exp-sheet-close {
+  background: var(--surface2); border: none; border-radius: 50%;
+  width: 28px; height: 28px; font-size: 14px; cursor: pointer;
+  color: var(--ink-muted); display: flex; align-items: center; justify-content: center;
+}
+
+/* Amount row */
+.exp-sheet-amount {
+  display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px;
+}
+.exp-amount-inp {
+  flex: 1; font-size: 34px; font-weight: 800; letter-spacing: -.6px;
+  border: none; border-bottom: 2px solid var(--border-mid); border-radius: 0;
+  background: transparent; color: var(--ink);
+  padding: 2px 6px; direction: ltr; text-align: left;
+}
+.exp-amount-inp:focus { outline: none; border-bottom-color: var(--ink); }
+.exp-cur-sel { width: auto; padding: 7px 10px; font-size: 14px; font-weight: 700; }
+
+/* Category picker grid */
+.exp-cat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 6px; padding: 4px 20px 14px;
+}
+.exp-cat-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  padding: 8px 4px; border-radius: var(--radius-sm);
+  font-family: inherit; transition: background .15s;
+}
+.exp-cat-tile:hover { background: var(--surface2); }
+.exp-cat-tile.active { background: var(--surface2); }
+.exp-cat-tile-circle {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--surface3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; transition: background .15s;
+}
+.exp-cat-tile span { font-size: 10.5px; color: var(--ink-muted); font-weight: 600; }
+.exp-cat-tile.active span { color: var(--ink); font-weight: 700; }
+
+/* Fields below picker */
+.exp-sheet-fields { display: flex; flex-direction: column; gap: 10px; padding: 0 20px 24px; }
+.exp-field-inp {
+  width: 100%; padding: 12px 14px;
+  border: 1.5px solid var(--border-mid); border-radius: var(--radius-sm);
+  font-size: 14px; font-family: inherit; color: var(--ink);
+  direction: rtl; background: var(--surface2);
+}
+.exp-field-inp:focus { outline: none; border-color: var(--ink); }
+
+.exp-pay-row { display: flex; gap: 8px; }
+.exp-pay-chip {
+  flex: 1; padding: 10px; text-align: center;
+  background: var(--surface2); border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 14px; font-family: inherit; font-weight: 600;
+  color: var(--ink-muted); transition: all .15s;
+}
+.exp-pay-chip.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
 
 /* ============================================================
    JOURNAL
