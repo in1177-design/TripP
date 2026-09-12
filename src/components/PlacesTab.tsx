@@ -272,10 +272,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
   async function handleRefresh(place: Place) {
     setRefreshingId(place.id);
     try {
-      const [enriched, imgUrl] = await Promise.all([
-        enrichPlace(place.nameHe, trip.destination).catch(() => ({})),
-        fetchWikiImage(place.nameEn || place.nameHe),
+      const searchTerm = place.nameEn || place.nameHe;
+      const [enriched, imgs] = await Promise.all([
+        enrichPlace(searchTerm, trip.destination, place.nameHe).catch(() => ({})),
+        searchImages(searchTerm),
       ]);
+      // Best image: first from searchImages, fallback to existing
+      const imgUrl = imgs[0] ?? null;
       const updated: Place = {
         ...place,
         ...enriched,
@@ -284,7 +287,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
       if (imgUrl) {
         setImageCache(c => ({ ...c, [place.id]: imgUrl }));
-        attempted.current.delete(place.id); // allow re-cache
+        attempted.current.delete(place.id);
       }
     } catch { /* silent */ }
     finally { setRefreshingId(null); }
