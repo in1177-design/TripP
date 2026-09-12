@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { Trip, Expense, ExpenseCategory, CustomCategory } from '../types';
 import { generateId } from '../storage';
+import { detectLocalCurrency } from '../utils/currencyUtils';
 
 // ─── Category metadata ────────────────────────────────────────
 type CatMeta = { icon: string; color: string };
@@ -189,13 +190,21 @@ type DisplayExp = Expense & { _perDay?: number; _numDays?: number };
 // ─── Main component ───────────────────────────────────────────
 interface Props { trip: Trip; onChange: (t: Trip) => void; }
 
-const DEFAULT_CUR = 'EUR';
-const blankForm = (): Omit<Expense, 'id'> => ({
+/** Returns the best default currency for a new expense in this trip.
+ *  Priority: last-used currency in expenses → detected local → ILS */
+function getDefaultCur(trip: Trip): string {
+  const expenses = trip.expenses || [];
+  if (expenses.length > 0) return expenses[expenses.length - 1].currency;
+  const local = detectLocalCurrency(trip.destination);
+  return local ?? 'ILS';
+}
+
+const blankForm = (trip: Trip): Omit<Expense, 'id'> => ({
   date: new Date().toISOString().slice(0, 10),
   dateEnd: undefined,
   useDate: undefined,
   description: '', amount: 0,
-  currency: DEFAULT_CUR, category: 'מסעדות', subcategory: undefined, paymentMethod: 'cash',
+  currency: getDefaultCur(trip), category: 'מסעדות', subcategory: undefined, paymentMethod: 'cash',
 });
 
 const blankNewCat = () => ({ icon: '', name: '', color: '#3498db' });
@@ -220,11 +229,13 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   const [showModal, setShowModal]     = useState(false);
   const [step, setStep]               = useState<'category' | 'form'>('category');
   const [editingId, setEditingId]     = useState<string | null>(null);
-  const [form, setForm]               = useState<Omit<Expense, 'id'>>(blankForm);
+  const [form, setForm]               = useState<Omit<Expense, 'id'>>(() => blankForm(trip));
   const [spreadDays, setSpreadDays]   = useState(false);
   const [earlyPurchase, setEarlyPurchase] = useState(false); // רכישה מוקדמת
   const [showNote, setShowNote]           = useState(false);
-  const [filterCur, setFilterCur]     = useState<string | null>(null);
+  const [showFormMenu, setShowFormMenu]   = useState(false);  // "..." dropdown in form header
+  // filterCur reserved for future currency filter UI
+  // const [filterCur, setFilterCur] = useState<string | null>(null);
 
   // Category editor state
   const [showCatEditor, setShowCatEditor]   = useState(false);
@@ -265,18 +276,6 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     setEditingCatId(cat.id);
     setAddingCat(true);
   }
-
-  // ── Totals per currency (count each expense once, regardless of spread)
-  const totals = useMemo(() => {
-    const t: Record<string, number> = {};
-    expenses.forEach(e => { t[e.currency] = (t[e.currency] || 0) + e.amount; });
-    return t;
-  }, [expenses]);
-
-  const allCurrencies = Object.keys(totals);
-  const primaryCur    = filterCur && totals[filterCur] ? filterCur : (allCurrencies[0] || DEFAULT_CUR);
-  const primaryTotal  = totals[primaryCur] || 0;
-  const primaryExpenses = expenses.filter(e => e.currency === primaryCur);
 
   const tripDays = useMemo(() => {
     if (!trip.startDate || !trip.endDate) return 1;
@@ -374,20 +373,23 @@ export default function ExpensesTab({ trip, onChange }: Props) {
 
   // ── Actions
   function save() {
-    if (!form.description.trim() || form.amount <= 0) return;
+    // אם אין תיאור — השתמש בתת-קטגוריה כתיאור (אם נבחרה)
+    const desc = form.description.trim() || form.subcategory?.trim() || '';
+    if (!desc || form.amount <= 0) return;
     const dateEnd = spreadDays && form.dateEnd && form.dateEnd > form.date ? form.dateEnd : undefined;
     const useDate = earlyPurchase && form.useDate && form.useDate > form.date ? form.useDate : undefined;
+    const toSaveForm = { ...form, description: desc };
     if (editingId) {
       // Update existing expense
       onChange({
         ...trip,
         expenses: expenses.map(e =>
-          e.id === editingId ? { ...form, id: editingId, dateEnd, useDate } : e
+          e.id === editingId ? { ...toSaveForm, id: editingId, dateEnd, useDate } : e
         ),
       });
     } else {
       // Add new expense
-      const toSave: Expense = { ...form, id: generateId(), dateEnd, useDate };
+      const toSave: Expense = { ...toSaveForm, id: generateId(), dateEnd, useDate };
       onChange({ ...trip, expenses: [...expenses, toSave] });
     }
     setShowModal(false);
@@ -399,10 +401,11 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   }
 
   function openModal() {
-    setForm(blankForm());
+    setForm(blankForm(trip));
     setSpreadDays(false);
     setEarlyPurchase(false);
     setShowNote(false);
+    setShowFormMenu(false);
     setEditingId(null);
     setStep('category');
     setShowModal(true);
@@ -428,6 +431,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
     setSpreadDays(!!(rest.dateEnd && rest.dateEnd > rest.date));
     setEarlyPurchase(!!(rest.useDate && rest.useDate > rest.date));
     setShowNote(!!(rest.receiptNote));
+    setShowFormMenu(false);
     setEditingId(exp.id);
     setStep('form');
     setShowModal(true);
@@ -723,31 +727,38 @@ export default function ExpensesTab({ trip, onChange }: Props) {
             {/* ── STEP 2: FORM ── */}
             {step === 'form' && (
               <>
-                {/* Header */}
+                {/* Header — outlined-square close + title + "..." menu */}
                 <div className="exp-sheet-hdr">
-                  <button className="exp-sheet-close"
-                    onClick={() => editingId ? setShowModal(false) : setStep('category')}
-                    title={editingId ? 'סגור' : 'חזור לקטגוריה'}>
-                    {editingId ? '✕' : '←'}
+                  <button className="exp-hdr-icon-btn"
+                    onClick={() => { setShowFormMenu(false); setShowModal(false); }}
+                    title="סגור">
+                    ✕
                   </button>
                   <span className="exp-sheet-title">{editingId ? 'עריכת הוצאה' : 'הוצאה חדשה'}</span>
-                  {editingId
-                    ? <button className="exp-sheet-close exp-sheet-del"
-                        onClick={() => { remove(editingId); setShowModal(false); setEditingId(null); }}>🗑️</button>
-                    : <span style={{ width: 28 }} />
-                  }
+                  {editingId ? (
+                    <div className="exp-hdr-menu-wrap">
+                      <button className="exp-hdr-icon-btn"
+                        onClick={() => setShowFormMenu(m => !m)}
+                        title="אפשרויות נוספות">
+                        ···
+                      </button>
+                      {showFormMenu && (
+                        <div className="exp-hdr-dropdown">
+                          <button className="exp-hdr-dropdown-item exp-hdr-dropdown-item--danger"
+                            onClick={() => { remove(editingId); setShowModal(false); setEditingId(null); setShowFormMenu(false); }}>
+                            🗑️ מחק הוצאה
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : <span style={{ width: 36 }} />}
                 </div>
 
                 {/* Scrollable content */}
                 <div className="exp-form-scroll">
 
-                  {/* Amount + currency — LTR row: currency left, amount right */}
+                  {/* Amount LEFT + currency RIGHT (LTR row) */}
                   <div className="exp-form-amount-row">
-                    <select className="exp-cur-big"
-                      value={form.currency}
-                      onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
-                      {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-                    </select>
                     <input
                       className="exp-amount-big"
                       type="number" min="0" step="0.01"
@@ -756,26 +767,40 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                       autoFocus
                       onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))}
                     />
+                    <select className="exp-cur-big"
+                      value={form.currency}
+                      onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+                      {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                    </select>
                   </div>
 
-                  {/* Category + subcategory */}
+                  {/* Category (right) + subcategory (left) — grid layout like reference */}
                   <div className="exp-form-cat-row">
-                    <span className="exp-form-cat-dot" style={{ background: getCatMeta(form.category).color }} />
-                    <CatIcon cat={form.category} size={16} color={getCatMeta(form.category).color} fallback={getCatMeta(form.category).icon} />
-                    <button className="exp-form-cat-name" onClick={() => setStep('category')}>
-                      {form.category} ›
-                    </button>
+                    {/* Main category — colored filled box, click to go back to picker */}
+                    <div className="exp-form-main-cat"
+                      style={{ background: getCatMeta(form.category).color }}>
+                      <button className="exp-form-cat-select-btn"
+                        onClick={() => setStep('category')}>
+                        <CatIcon cat={form.category} size={20} color="#fff"
+                          fallback={getCatMeta(form.category).icon} />
+                        <span>{form.category}</span>
+                      </button>
+                      <span className="exp-form-cat-chevron">▾</span>
+                    </div>
+                    {/* Subcategory select */}
                     {(() => {
                       const customCatObj = customCats.find(c => c.name === form.category);
                       const opts = customCatObj?.subcats?.length ? customCatObj.subcats : (SUBCATS[form.category] ?? []);
-                      if (!opts.length) return null;
                       return (
-                        <select className="exp-form-subcat"
-                          value={form.subcategory || ''}
-                          onChange={e => setForm(f => ({ ...f, subcategory: e.target.value || undefined }))}>
-                          <option value="">— תת-קטגוריה —</option>
-                          {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        <div className="exp-form-subcat-wrap">
+                          <select className="exp-form-subcat"
+                            value={form.subcategory || ''}
+                            onChange={e => setForm(f => ({ ...f, subcategory: e.target.value || undefined }))}>
+                            <option value="">— תת-קטגוריה —</option>
+                            {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                          <span className="exp-form-subcat-chevron">▾</span>
+                        </div>
                       );
                     })()}
                   </div>
@@ -829,31 +854,37 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                     </label>
                   </div>
 
-                  {/* Date inputs */}
-                  <div className="exp-form-date-inputs">
-                    <div className="exp-form-date-field">
-                      <label className="exp-field-label">{spreadDays ? 'מתאריך' : 'תאריך'}</label>
-                      <input className="exp-form-date-inp" type="date"
-                        value={form.date}
-                        onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                      />
-                    </div>
-                    {spreadDays && (
+                  {/* Date inputs — grid: cols depend on range/purchase state */}
+                  <div className={[
+                    'exp-form-date-grid',
+                    spreadDays ? 'is-range' : '',
+                    !earlyPurchase ? 'no-purchase' : '',
+                  ].join(' ')}>
+                    {/* dates sub-wrapper: display:contents → children are grid items */}
+                    <div className="exp-form-date-dates">
                       <div className="exp-form-date-field">
-                        <label className="exp-field-label">עד תאריך</label>
+                        <label className="exp-field-label">{spreadDays ? 'מתאריך' : 'תאריך'}</label>
                         <input className="exp-form-date-inp" type="date"
-                          value={form.dateEnd || ''}
-                          min={form.date}
-                          onChange={e => setForm(f => ({ ...f, dateEnd: e.target.value }))}
+                          value={form.date}
+                          onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                         />
                       </div>
-                    )}
+                      {spreadDays && (
+                        <div className="exp-form-date-field">
+                          <label className="exp-field-label">עד תאריך</label>
+                          <input className="exp-form-date-inp" type="date"
+                            value={form.dateEnd || ''}
+                            min={form.date}
+                            onChange={e => setForm(f => ({ ...f, dateEnd: e.target.value }))}
+                          />
+                        </div>
+                      )}
+                    </div>
                     {earlyPurchase && (
                       <div className="exp-form-date-field">
-                        <label className="exp-field-label">תאריך שימוש</label>
+                        <label className="exp-field-label">תאריך רכישה</label>
                         <input className="exp-form-date-inp" type="date"
                           value={form.useDate || ''}
-                          min={form.date}
                           onChange={e => setForm(f => ({ ...f, useDate: e.target.value }))}
                         />
                       </div>
@@ -865,31 +896,29 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                     )}
                   </div>
 
-                  {/* Payment method */}
-                  <div className="exp-form-pay-row">
-                    {([
-                      { k: 'cash' as const, label: 'מזומן' },
-                      { k: 'card' as const, label: 'אשרא' },
-                    ] as const).map(({ k, label }) => (
-                      <button key={k}
-                        className={`exp-form-pay-chip${form.paymentMethod === k ? ' active' : ''}`}
-                        onClick={() => setForm(f => ({ ...f, paymentMethod: k }))}>
-                        {label}
-                      </button>
-                    ))}
-                    <button
-                      className={`exp-form-pay-online${form.paymentMethod === 'online' ? ' active' : ''}`}
-                      onClick={() => setForm(f => ({ ...f, paymentMethod: f.paymentMethod === 'online' ? 'cash' : 'online' }))}>
-                      הזמנה אינטרנטית ›
-                    </button>
+                  {/* Payment method — button-based segmented control */}
+                  <div className="exp-payment-wrap" role="group" aria-label="אמצעי תשלום">
+                    <span className="exp-field-label exp-payment-label">אמצעי תשלום</span>
+                    <div className="exp-payment-opts">
+                      {([ ['cash', 'מזומן'], ['card', 'אשראי'], ['online', 'הזמנה אינטרנטית'] ] as const).map(
+                        ([val, label]) => (
+                          <button key={val} type="button"
+                            className={form.paymentMethod === val ? 'is-selected' : ''}
+                            aria-pressed={form.paymentMethod === val}
+                            onClick={() => setForm(f => ({ ...f, paymentMethod: val }))}>
+                            {label}
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
 
                 </div>{/* end exp-form-scroll */}
 
-                {/* Save — sticky at bottom */}
+                {/* Save — sticky at bottom, lime-yellow background */}
                 <div className="exp-form-save-wrap">
                   <button className="exp-form-save-btn" onClick={save}
-                    disabled={!form.description.trim() || form.amount <= 0}>
+                    disabled={(!form.description.trim() && !form.subcategory?.trim()) || form.amount <= 0}>
                     שמור הוצאה
                   </button>
                 </div>

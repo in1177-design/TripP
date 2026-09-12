@@ -33,23 +33,45 @@ interface Props {
   onEdit: () => void;
 }
 
-function tripDays(trip: Trip): number {
-  if (!trip.startDate || !trip.endDate) return 0;
-  return Math.max(1, Math.ceil(
-    (new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / 86400000
-  ));
-}
+const AIRPORT_CITY: Record<string, string> = {
+  TLV: 'תל אביב', KRK: 'קרקוב', WAW: 'ורשה', PRG: 'פראג',
+  BUD: 'בודפשט', VIE: 'וינה', JFK: 'ניו יורק', CDG: 'פריז',
+  LHR: 'לונדון', FCO: 'רומא', BCN: 'ברצלונה', AMS: 'אמסטרדם',
+  IST: 'איסטנבול', DXB: 'דובאי', BKK: 'בנגקוק', NRT: 'טוקיו',
+  ATH: 'אתונה', MAD: 'מדריד', MXP: 'מילאנו', FRA: 'פרנקפורט',
+  MUC: 'מינכן', ZRH: 'ציריך', CPH: 'קופנהגן', ARN: 'סטוקהולם',
+  OSL: 'אוסלו', HEL: 'הלסינקי', DUB: 'דבלין', LIS: 'ליסבון',
+  OPO: 'פורטו',   GDN: 'גדנסק',  WRO: 'ורוצלב',
+};
 
 function HeroFlightCard({ flight }: { flight: Flight }) {
+  const fromCity = AIRPORT_CITY[flight.from] ?? '';
+  const toCity   = AIRPORT_CITY[flight.to]   ?? '';
   return (
-    <div className="hero-flight-card">
+    <article className="hfc-ticket">
       <div className="hfc-top">
-        <span className="hfc-dir">{flight.dir === 'out' ? 'הלוך' : 'חזור'}</span>
-        <span className="hfc-no">{flight.flightNo}</span>
+        <span className="hfc-dir">
+          <span className="hfc-plane" aria-hidden="true">{flight.dir === 'out' ? '↗' : '↙'}</span>
+          {flight.dir === 'out' ? 'הלוך' : 'חזור'}
+        </span>
+        <span className="hfc-no" dir="ltr">{flight.flightNo}</span>
       </div>
-      <div className="hfc-route">{flight.from} → {flight.to}</div>
-      <div className="hfc-info">{flight.dep} – {flight.arr} · {fmtDateShort(flight.date)}</div>
-    </div>
+      <div className="hfc-route" dir="ltr">
+        <div className="hfc-airport">
+          <div className="hfc-code">{flight.from}</div>
+          {fromCity && <div className="hfc-city" dir="rtl">{fromCity}</div>}
+        </div>
+        <div className="hfc-route-line" aria-hidden="true" />
+        <div className="hfc-airport hfc-airport--dest">
+          <div className="hfc-code">{flight.to}</div>
+          {toCity && <div className="hfc-city" dir="rtl">{toCity}</div>}
+        </div>
+      </div>
+      <div className="hfc-bottom">
+        <span>{fmtDateShort(flight.date)}</span>
+        <span className="hfc-times" dir="ltr">{flight.dep} → {flight.arr}</span>
+      </div>
+    </article>
   );
 }
 
@@ -74,7 +96,6 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
     { key: 'journal',    label: 'יומן',    icon: '📖' },
   ];
 
-  const days = tripDays(trip);
   const flights = trip.flights || [];
 
   return (
@@ -91,19 +112,9 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
             <button className="hero-settings-btn" onClick={() => setTab('settings')}>⚙️ הגדרות</button>
           </div>
 
-          {/* Destination + dates */}
+          {/* Destination only — dates & chips removed to make room for flight cards */}
           <div className="hero-body">
             <h1 className="hero-destination">{trip.destination}</h1>
-            {trip.startDate && (
-              <span className="hero-dates">
-                {fmtDateShort(trip.startDate)} – {fmtDateShort(trip.endDate)} · {days} ימים · {trip.travelers} מטיילים
-              </span>
-            )}
-            {trip.style && trip.style.length > 0 && (
-              <div className="style-tags">
-                {trip.style.map(s => <span key={s} className="style-tag">{s}</span>)}
-              </div>
-            )}
           </div>
 
           {/* Flight ticket cards */}

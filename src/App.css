@@ -297,7 +297,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 /* Destination + dates */
 .hero-body { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 12px; }
 .hero-destination {
-  font-size: 36px; font-weight: 900; letter-spacing: -.6px;
+  font-size: 26px; font-weight: 900; letter-spacing: -.4px;
   text-shadow: 0 2px 12px rgba(0,0,0,.4);
   margin-bottom: 6px;
 }
@@ -309,32 +309,74 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   border-radius: 99px; padding: 3px 12px; font-size: 12px; font-weight: 600;
 }
 
-/* Flight ticket cards row */
+/* Flight ticket cards — 2-col grid, like krakow-hero.html */
 .hero-flights {
-  display: flex; gap: 12px; flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
   margin-top: 18px;
+  max-width: 1100px;
+  width: 100%;
+  margin-inline: auto;
 }
-.hero-flight-card {
-  background: rgba(10, 30, 15, 0.72);
-  border: 1px solid rgba(232,255,61,.22);
-  backdrop-filter: blur(10px);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  min-width: 190px; flex: 1; max-width: 300px;
-  color: #fff;
+.hfc-ticket {
+  padding: 12px 16px 11px;
+  background: linear-gradient(125deg, rgba(35,61,45,.45), rgba(16,41,31,.45));
+  border: 1px solid rgba(209,233,144,.28);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(0,18,8,.28);
+  backdrop-filter: blur(12px);
+  transition: transform .22s, border-color .22s;
+  color: #f5f8ef;
 }
+.hfc-ticket:hover { transform: translateY(-3px); border-color: rgba(220,244,154,.60); }
 .hfc-top {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 12px; color: rgba(255,255,255,.50);
-  margin-bottom: 7px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; color: rgba(255,255,255,.52);
 }
-.hfc-dir { font-weight: 600; color: rgba(255,255,255,.55); }
-.hfc-no  { font-family: monospace; letter-spacing: .04em; }
+.hfc-dir  { display: flex; align-items: center; gap: 5px; }
+.hfc-plane { color: #dcf49a; font-size: 16px; line-height: 1; }
+.hfc-no   { font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: .06em; }
 .hfc-route {
-  font-size: 22px; font-weight: 900; letter-spacing: -.3px;
-  margin-bottom: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 10px;
 }
-.hfc-info { font-size: 13px; color: rgba(255,255,255,.65); }
+.hfc-airport { text-align: left; }
+.hfc-airport--dest { text-align: right; }
+.hfc-code {
+  font-family: Arial, sans-serif; font-size: 30px; font-weight: 800;
+  letter-spacing: -.03em; line-height: 1;
+}
+.hfc-city { font-size: 12px; color: rgba(255,255,255,.52); margin-top: 4px; }
+.hfc-route-line {
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+  max-width: 120px; color: #dcf49a;
+}
+.hfc-route-line::before {
+  content: ''; flex: 1; border-top: 1px dashed rgba(190,213,154,.36); display: block;
+}
+.hfc-route-line::after {
+  content: '✈'; font-size: 20px; color: #dcf49a; line-height: 1;
+}
+.hfc-bottom {
+  position: relative;
+  display: flex; justify-content: space-between; align-items: center;
+  /* extend edge-to-edge, matching card's horizontal padding (16px) */
+  margin: 10px -16px 0; padding: 8px 16px 0;
+  border-top: 1px dashed rgba(189,209,189,.30);
+  font-size: 13px; color: rgba(213,225,207,.85);
+}
+/* boarding-pass half-circle cutouts */
+.hfc-bottom::before,
+.hfc-bottom::after {
+  content: ''; position: absolute; top: -7px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: transparent; border: 1px dashed rgba(189,209,189,.30);
+}
+.hfc-bottom::before { left:  -7px; }
+.hfc-bottom::after  { right: -7px; }
+.hfc-times { font-family: Arial, sans-serif; font-size: 14px; letter-spacing: .02em; }
 
 /* Settings image preview */
 .settings-image-preview {
@@ -860,12 +902,45 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   box-shadow: 0 -8px 40px rgba(0,0,0,.22);
 }
 .exp-sheet-hdr {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 42px 1fr 42px;
+  align-items: center; min-height: 48px;
+  padding: 8px 20px; border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--surface); z-index: 1;
   flex-shrink: 0;
+  direction: ltr;   /* X on left, ··· on right — like mobile UX */
 }
-.exp-sheet-title { font-size: 16px; font-weight: 800; }
+.exp-sheet-title {
+  font-size: 16px; font-weight: 500;
+  text-align: center; direction: rtl;
+}
+/* Outlined square icon button (used in form header: close + more) */
+.exp-hdr-icon-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  border: 1.5px solid #1596ff; background: transparent;
+  font-size: 14px; cursor: pointer; color: #1596ff;
+  display: grid; place-items: center;
+  flex-shrink: 0; transition: background .12s;
+}
+.exp-hdr-icon-btn:hover { background: rgba(21,150,255,.08); }
+
+/* Dropdown menu from "..." button */
+.exp-hdr-menu-wrap { position: relative; }
+.exp-hdr-dropdown {
+  position: absolute; top: calc(100% + 8px); left: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-mid); border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  min-width: 160px; z-index: 10; overflow: hidden;
+}
+.exp-hdr-dropdown-item {
+  width: 100%; padding: 13px 16px;
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; font-family: inherit; text-align: right;
+  display: flex; align-items: center; gap: 8px; color: var(--ink);
+}
+.exp-hdr-dropdown-item:hover { background: var(--surface2); }
+.exp-hdr-dropdown-item--danger { color: #e74c3c; }
+
 .exp-sheet-close {
   background: var(--surface2); border: none; border-radius: 50%;
   width: 28px; height: 28px; font-size: 14px; cursor: pointer;
@@ -1072,7 +1147,8 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 /* Date row (side by side when spread) */
 .exp-date-row { display: flex; gap: 8px; }
 .exp-date-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.exp-field-label { font-size: 11px; font-weight: 700; color: var(--ink-muted); letter-spacing: .03em; }
+/* Unified field label — used for תאריך, אמצעי תשלום, etc. */
+.exp-field-label { font-size: 12px; font-weight: 600; color: var(--ink-muted); font-family: inherit; }
 
 /* Spread badge on expense rows */
 .exp-row-desc-line { display: flex; align-items: center; gap: 6px; }
@@ -1091,92 +1167,127 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 /* ── Redesigned form step ── */
 .exp-sheet--form {
-  display: flex; flex-direction: column; max-height: 92vh; overflow: hidden;
+  /* Full-screen, keyboard-aware: dvh shrinks when virtual keyboard opens */
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 100vh; height: 100dvh;   /* dvh fallback: vh for old browsers */
+  max-height: 100dvh;
+  border-radius: 0;
+  z-index: 501;                     /* above overlay (z-index: 500) */
+  display: flex; flex-direction: column; overflow: hidden;
 }
 .exp-form-scroll {
-  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
 }
 
-/* Amount row — force LTR so flex:1 works correctly */
+/* Amount row — centered, underline input only (like reference) */
 .exp-form-amount-row {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 22px 24px 18px;
-  border-bottom: 1px solid var(--border);
-  direction: ltr;          /* prevent RTL from collapsing the input */
+  display: flex; align-items: center; justify-content: center; gap: 15px;
+  margin: 18px 0 12px; padding: 0;
+  direction: ltr;
 }
 .exp-amount-big {
-  flex: 1 1 0px; width: 0; font-size: 52px; font-weight: 800; letter-spacing: -2px;
-  border: none; background: none; color: var(--ink);
-  font-family: inherit; min-width: 0;
-  direction: ltr; text-align: left;
+  width: 100px; flex: none;
+  font-size: 31px; font-weight: 500; letter-spacing: 0;
+  border: 0; border-bottom: 2px solid var(--ink); border-radius: 0;
+  background: transparent; color: var(--ink);
+  font-family: inherit;
+  padding: 1px 0 5px; text-align: center;
 }
 .exp-amount-big::placeholder { color: #bbb; }
-.exp-amount-big:focus { outline: none; }
+.exp-amount-big:focus { outline: none; border-bottom-color: var(--ink); }
 .exp-amount-big::-webkit-inner-spin-button,
 .exp-amount-big::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .exp-amount-big[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .exp-cur-big {
-  font-size: 14px; font-weight: 700; flex: 0 0 auto;
-  width: 80px; max-width: 80px;
-  border: 1.5px solid var(--border-mid); border-radius: 9px;
-  padding: 7px 10px; background: var(--surface2); color: var(--ink);
-  font-family: inherit; cursor: pointer;
+  font-size: 14px; font-weight: 500;
+  border: 0; background: transparent; color: var(--ink);
+  font: inherit; font-weight: 500; cursor: pointer; min-height: 38px;
+  width: auto; flex-shrink: 0;
 }
 
-/* Category row */
+/* Category row — grid: main (right) + subcat (left) */
 .exp-form-cat-row {
+  display: grid; grid-template-columns: .85fr 1.55fr;
+  gap: 12px; padding: 0 24px 12px;
+}
+/* Main category — filled colored rounded box */
+.exp-form-main-cat {
+  position: relative; border-radius: 12px; overflow: hidden; min-width: 0;
+}
+.exp-form-cat-select-btn {
   display: flex; align-items: center; gap: 8px;
-  padding: 14px 24px; border-bottom: 1px solid var(--border);
+  width: 100%; min-height: 46px;
+  border: none; background: transparent; color: #fff;
+  font: inherit; font-size: 14px; font-weight: 500;
+  cursor: pointer; direction: rtl;
+  padding: 0 42px 0 34px;
 }
-.exp-form-cat-dot {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+.exp-form-cat-chevron {
+  position: absolute; left: 10px; top: 50%; translate: 0 -50%;
+  pointer-events: none; color: rgba(255,255,255,.85); font-size: 12px;
 }
-.exp-form-cat-name {
-  font-size: 15px; font-weight: 700;
-  background: none; border: none; cursor: pointer;
-  color: var(--ink); padding: 0; font-family: inherit;
-  flex-shrink: 0; white-space: nowrap;
+/* Subcat select */
+.exp-form-subcat-wrap {
+  position: relative; min-width: 0;
 }
 .exp-form-subcat {
-  flex: 1; min-width: 0; font-size: 13px; font-family: inherit;
-  border: none; background: none; color: var(--ink-muted);
-  cursor: pointer; appearance: none; direction: rtl;
+  width: 100%; min-height: 46px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--ink-muted);
+  font: inherit; font-size: 14px;
+  padding: 0 38px 0 40px; appearance: none; direction: rtl;
+  box-sizing: border-box;
 }
-.exp-form-subcat:focus { outline: none; }
+.exp-form-subcat:focus { outline: none; border-color: var(--ink); }
+.exp-form-subcat-chevron {
+  position: absolute; left: 14px; top: 50%; translate: 0 -50%;
+  pointer-events: none; color: var(--ink-muted); font-size: 12px;
+}
+/* When no subcat — main cat spans full row */
+.exp-form-cat-row:has(.exp-form-main-cat:only-child) {
+  grid-template-columns: 1fr;
+}
 
-/* Description row */
+/* Description row — bordered input with + button positioned inside */
 .exp-form-desc-row {
-  display: flex; align-items: center;
-  padding: 14px 24px; border-bottom: 1px solid var(--border); gap: 10px;
+  position: relative;
+  margin: 0 24px 12px;
 }
 .exp-form-desc-inp {
-  flex: 1; font-size: 15px; font-family: inherit;
-  border: none; background: none; color: var(--ink);
-  direction: rtl; min-width: 0;
-}
-.exp-form-desc-inp::placeholder { color: var(--ink-muted); }
-.exp-form-desc-inp:focus { outline: none; }
-.exp-form-desc-plus {
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 1.5px solid var(--border-mid); background: none;
-  font-size: 20px; line-height: 1; color: var(--ink-muted);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; font-family: inherit; transition: all .15s;
-}
-.exp-form-desc-plus.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
-.exp-form-note-row { padding: 0 24px 12px; border-bottom: 1px solid var(--border); }
-.exp-form-note-inp {
-  width: 100%; font-size: 13px; font-family: inherit;
-  border: 1.5px solid var(--border-mid); border-radius: 8px;
-  padding: 9px 12px; background: var(--surface2); color: var(--ink);
+  width: 100%; min-height: 46px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 14px;
+  padding: 0 14px 0 47px;   /* left gap for the + button */
   direction: rtl; box-sizing: border-box;
 }
-.exp-form-note-inp:focus { outline: none; border-color: var(--ink); }
+.exp-form-desc-inp::placeholder { color: var(--ink-muted); }
+.exp-form-desc-inp:focus { outline: none; border-color: var(--ink-muted); }
+/* + button — absolute inside the wrapper, on the left (logical end in RTL) */
+.exp-form-desc-plus {
+  position: absolute;
+  left: 16px; top: 50%; translate: 0 -50%;
+  width: 24px; height: 24px;
+  border: 1.5px solid #1596ff; border-radius: 6px; background: transparent;
+  color: #1596ff; font-size: 16px; font-weight: 700;
+  cursor: pointer; display: grid; place-items: center;
+  font-family: inherit; transition: rotate .16s ease;
+}
+.exp-form-desc-plus.active { rotate: 45deg; }
+.exp-form-note-row { padding: 0 24px 12px; }
+.exp-form-note-inp {
+  width: 100%; min-height: 46px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 0 14px; background: var(--surface); color: var(--ink);
+  direction: rtl; box-sizing: border-box;
+}
+.exp-form-note-inp:focus { outline: none; border-color: var(--ink-muted); }
 
 /* Date control row */
 .exp-form-date-ctrl {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 24px; border-bottom: 1px solid var(--border); gap: 8px;
+  padding: 12px 24px; gap: 8px;
 }
 .exp-form-date-toggle {
   display: flex; background: var(--surface2);
@@ -1184,7 +1295,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 .exp-form-date-tab {
   font-size: 12px; font-weight: 600; font-family: inherit;
-  padding: 5px 11px; border: none; background: none;
+  height: 34px; padding: 0 11px; border: none; background: none;
   border-radius: 6px; cursor: pointer; color: var(--ink-muted);
   white-space: nowrap; transition: all .15s;
 }
@@ -1199,46 +1310,77 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   cursor: pointer; flex-shrink: 0;
 }
 
-/* Date inputs */
-.exp-form-date-inputs {
-  display: flex; flex-wrap: wrap; gap: 10px;
-  padding: 14px 24px; border-bottom: 1px solid var(--border);
+/* Date grid — number of columns driven by class modifiers (like reference) */
+.exp-form-date-grid {
+  display: grid;
+  /* default: single date + purchase = 2 cols */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 24px 0;
+  margin-bottom: 0;
+}
+/* Range only (no purchase) */
+.exp-form-date-grid.no-purchase {
+  grid-template-columns: 1fr;
+}
+/* Range + no purchase */
+.exp-form-date-grid.no-purchase.is-range {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* Range + purchase = 3 cols */
+.exp-form-date-grid.is-range {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* Dates sub-wrapper: display:contents so children flow into the parent grid */
+.exp-form-date-dates {
+  display: contents;
 }
 .exp-form-date-field {
-  flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 5px;
+  min-width: 0; display: flex; flex-direction: column; gap: 6px;
 }
 .exp-form-date-inp {
-  width: 100%; font-size: 14px; font-family: inherit;
-  border: 1.5px solid var(--border-mid); border-radius: 9px;
-  padding: 9px 12px; background: var(--surface2); color: var(--ink);
-  box-sizing: border-box; direction: ltr;
+  width: 100%; min-height: 46px; font-size: 12px; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 0 8px; background: var(--surface); color: var(--ink);
+  box-sizing: border-box; direction: ltr; min-width: 0;
 }
-.exp-form-date-inp:focus { outline: none; border-color: var(--ink); }
+.exp-form-date-inp:focus { outline: none; border-color: var(--ink-muted); }
 .exp-spread-info-row {
   width: 100%; font-size: 12px; color: var(--ink-muted); font-weight: 600;
-  padding: 2px 2px 0;
+  padding: 2px 2px 0; grid-column: 1 / -1;
 }
 
-/* Payment row */
-.exp-form-pay-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 14px 24px; border-bottom: 1px solid var(--border);
+/* Payment — segmented control (button-based, like reference) */
+.exp-payment-wrap {
+  direction: rtl;
+  padding: 14px 24px;
 }
-.exp-form-pay-chip {
-  padding: 8px 18px; font-size: 14px; font-weight: 600;
-  border: 1.5px solid var(--border-mid); border-radius: 9px;
-  background: none; cursor: pointer; color: var(--ink);
-  font-family: inherit; transition: all .15s; white-space: nowrap;
+.exp-payment-label { display: block; margin: 0 0 6px; }
+.exp-payment-opts {
+  display: grid;
+  grid-template-columns: 1fr .75fr .95fr;
+  gap: 3px; padding: 4px; border-radius: 12px;
+  background: #edf0f5;
 }
-.exp-form-pay-chip.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
-.exp-form-pay-online {
-  flex: 1; font-size: 13px; font-weight: 600; font-family: inherit;
-  border: 1.5px solid var(--border-mid); border-radius: 9px;
-  padding: 8px 12px; background: none; color: var(--ink-muted);
-  cursor: pointer; text-align: start; transition: all .15s;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.exp-payment-opts button {
+  height: 34px; border: 0; border-radius: 9px;
+  background: transparent; color: #7b8598;
+  font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, color .15s;
 }
-.exp-form-pay-online.active { background: var(--dark); border-color: var(--dark); color: var(--yellow); }
+.exp-payment-opts button.is-selected {
+  background: #111827; color: var(--surface);
+}
+/* מזומן selected — lime text */
+.exp-payment-opts button.is-selected:first-child { color: #cff34f; }
+.exp-payment-opts button:focus-visible {
+  outline: 2px solid #1596ff; outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .exp-payment-opts { background: rgba(255,255,255,.08); }
+}
+:root[data-theme="dark"] .exp-payment-opts { background: rgba(255,255,255,.08); }
 
 /* Delete icon in header */
 .exp-sheet-del { font-size: 16px; }
@@ -1246,15 +1388,16 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 /* Save button */
 .exp-form-save-wrap {
   padding: 16px 20px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)); /* iPhone notch/home bar */
   border-top: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
 }
 .exp-form-save-btn {
-  width: 100%; padding: 15px;
-  background: var(--dark); color: var(--yellow);
-  border: none; border-radius: 13px;
-  font-size: 16px; font-weight: 800; font-family: inherit;
+  width: 100%; min-height: 44px; padding: 0;
+  background: #cff34f; color: #111827;   /* reference lime-green + dark text */
+  border: none; border-radius: 24px;
+  font-size: 16px; font-weight: 500; font-family: inherit;
   cursor: pointer; transition: opacity .15s;
 }
 .exp-form-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1324,8 +1467,20 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .field-row { flex-direction: column; }
   .field-sm, .field-xs { flex: 1; }
   .hero-destination { font-size: 26px; }
-  .hero-flights { flex-direction: column; }
-  .hero-flight-card { max-width: 100%; }
+  .hfc-code { font-size: clamp(20px, 5.5vw, 28px); }
+  .hfc-city { font-size: 11px; }
+  .hfc-ticket { padding: 12px 10px 11px; border-radius: 13px; }
+  .hfc-plane { display: none; }
+  .hfc-bottom { flex-direction: row; align-items: center; gap: 4px; font-size: 11px; flex-wrap: wrap;
+    margin-inline: -10px; padding-inline: 10px; }
+  .hfc-times  { font-size: 11px; }
+  .hfc-bottom::before, .hfc-bottom::after { width: 10px; height: 10px; top: -6px; }
+  .hfc-bottom::before { left: -6px; }
+  .hfc-bottom::after  { right: -6px; }
+  /* route-line mobile: hide dashed line, keep plane icon only */
+  .hfc-route-line { flex: 0 0 auto; gap: 0; max-width: none; }
+  .hfc-route-line::before { display: none; }
+  .hfc-route-line::after { font-size: 16px; }
   .hero-overlay { padding: 16px 18px 20px; }
   .tab-btn { padding: 8px 12px; font-size: 13px; }
 }

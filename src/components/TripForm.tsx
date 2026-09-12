@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Trip, TripStyle } from '../types';
+import { detectLocalCurrency } from '../utils/currencyUtils';
 
 const STYLES: TripStyle[] = ['תרבות', 'טבע', 'עיר', 'חוף', 'הרפתקאות', 'קולינריה', 'משפחה'];
 
@@ -22,7 +23,18 @@ export default function TripForm({ trip, onSave, onCancel }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.destination.trim()) return;
-    onSave(form);
+    // Auto-add the local currency to exchangeRates so the user knows to fill it in
+    const localCur = detectLocalCurrency(form.destination);
+    const saved: Trip = localCur && localCur !== 'ILS'
+      ? {
+          ...form,
+          exchangeRates: {
+            [localCur]: 0,             // 0 = not set yet (prompts user to fill)
+            ...(form.exchangeRates || {}), // keep any existing rates
+          },
+        }
+      : form;
+    onSave(saved);
   }
 
   return (
