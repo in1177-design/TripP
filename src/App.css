@@ -749,31 +749,59 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 /* ── Expense list ── */
 .exp-list { display: flex; flex-direction: column; gap: 0; }
-.exp-group { margin-bottom: 6px; }
+.exp-group { margin-bottom: 14px; }
 .exp-group-hdr {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 2px 5px; font-size: 13px;
+  padding: 10px 2px 6px; font-size: 13px;
 }
 .exp-group-date { color: var(--ink-muted); font-weight: 600; }
 .exp-group-tot  { color: var(--ink); font-weight: 700; font-size: 13px; }
-
-.exp-row {
-  display: flex; align-items: center; gap: 11px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 5px;
+/* Rows inside a group — card with clipped corners */
+.exp-group-rows {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
+
+/* ── Expense row — new design ── */
+.exp-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface);
+  padding: 13px 16px;
+  cursor: pointer;
+  transition: background .1s;
+  border-bottom: 1px solid var(--border);
+}
+.exp-row:last-child { border-bottom: none; }
+.exp-row:hover { background: var(--surface2); }
+
 .exp-icon-circle {
   width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 18px;
 }
 .exp-icon-circle--lg { width: 52px; height: 52px; font-size: 24px; }
-.exp-row-body { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.exp-row-body { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
 .exp-row-desc { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.exp-row-sub  { font-size: 12px; color: var(--ink-muted); }
-.exp-row-end  { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; margin-left: 4px; }
-.exp-row-amt  { font-weight: 800; font-size: 14px; white-space: nowrap; }
-.exp-row-cur  { font-size: 11px; color: var(--ink-muted); }
+.exp-row-sub  { font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Amount column — leftmost in RTL */
+.exp-row-amounts { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 2px; }
+.exp-row-ils  { font-size: 17px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+.exp-row-orig { font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
+
+/* Delete — now inside edit sheet only */
+.exp-delete-full {
+  display: block; width: calc(100% - 40px); margin: 10px 20px 20px;
+  background: none; border: 1.5px solid var(--danger); border-radius: var(--radius-sm);
+  color: var(--danger); font-size: 14px; font-weight: 600; font-family: inherit;
+  padding: 12px; cursor: pointer; transition: background .15s;
+}
+.exp-delete-full:hover { background: rgba(193,80,46,.08); }
+
+/* Legacy — kept for backward compat, hidden */
 .exp-del {
+  display: none;
   background: none; border: none; cursor: pointer; color: var(--ink-subtle);
   font-size: 20px; line-height: 1; padding: 0 0 0 4px;
   transition: color .15s; flex-shrink: 0;

@@ -509,47 +509,55 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                   </div>
                 );
               })()}
+              <div className="exp-group-rows">
               {g.exps.map((exp, idx) => {
                 const m = getCatMeta(exp.category);
                 const isSpread = !!exp._numDays;
                 const dispAmt  = exp._perDay ?? exp.amount;
+                const ilsAmt   = toILS(dispAmt, exp.currency);
+                const showOrig = exp.currency !== 'ILS' || isSpread; // show original if foreign or spread
                 return (
-                  <div key={`${exp.id}-${idx}`} className="exp-row"
-                    onClick={() => openEdit(exp)} style={{ cursor: 'pointer' }}>
+                  <div key={`${exp.id}-${idx}`} className="exp-row" onClick={() => openEdit(exp)}>
+                    {/* Icon — rightmost in RTL */}
                     <div className="exp-icon-circle" style={{ background: m.color }}>
                       <CatIcon cat={exp.category} size={18} fallback={m.icon} />
                     </div>
+                    {/* Name + meta */}
                     <div className="exp-row-body">
                       <div className="exp-row-desc-line">
                         <span className="exp-row-desc">{exp.description}</span>
-                        {isSpread && (
-                          <span className="exp-spread-badge">{exp._numDays} ימים</span>
-                        )}
+                        {isSpread && <span className="exp-spread-badge">{exp._numDays} ימים</span>}
                       </div>
                       <span className="exp-row-sub">
                         {exp.category}
-                        {exp.subcategory ? ` › ${exp.subcategory}` : ''}
-                        {exp.paymentMethod ? ` · ${exp.paymentMethod === 'cash' ? 'מזומן' : 'אשראי'}` : ''}
+                        {exp.subcategory ? ` • ${exp.subcategory}` : ''}
+                        {exp.paymentMethod ? ` • ${exp.paymentMethod === 'cash' ? 'מזומן' : 'אשראי'}` : ''}
                         {isSpread && exp.dateEnd
-                          ? ` · ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
+                          ? ` • ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
                           : ''}
                       </span>
                     </div>
-                    <div className="exp-row-end">
-                      <span className="exp-row-amt">
-                        {dispAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      {isSpread && (
-                        <span className="exp-row-total-hint">
-                          סה״כ {exp.amount.toFixed(0)}
+                    {/* Amounts — leftmost in RTL */}
+                    <div className="exp-row-amounts">
+                      {ilsAmt > 0 ? (
+                        <span className="exp-row-ils">
+                          ₪{ilsAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
+                      ) : (
+                        <span className="exp-row-ils">
+                          {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
                         </span>
                       )}
-                      <span className="exp-row-cur">{exp.currency}</span>
+                      {ilsAmt > 0 && showOrig && (
+                        <span className="exp-row-orig">
+                          {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
+                        </span>
+                      )}
                     </div>
-                    <button className="exp-del" onClick={e => { e.stopPropagation(); remove(exp.id); }} title="מחק">×</button>
                   </div>
                 );
               })}
+              </div>{/* end exp-group-rows */}
             </div>
           ))}
         </div>
@@ -803,6 +811,13 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                     ))}
                   </div>
                 </div>
+                {/* Delete button — only when editing existing expense */}
+                {editingId && (
+                  <button className="exp-delete-full"
+                    onClick={() => { remove(editingId); setShowModal(false); setEditingId(null); }}>
+                    🗑️ מחק הוצאה
+                  </button>
+                )}
               </>
             )}
           </div>
