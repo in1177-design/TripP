@@ -384,37 +384,34 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   return (
     <div className="exp-root">
 
-      {/* ── STATS BAR ── */}
-      {primaryTotal > 0 && (
+      {/* ── STATS BAR — all currencies always visible ── */}
+      {allCurrencies.length > 0 && (
         <div className="exp-stats-bar">
-          <div className="exp-stat">
-            <span className="exp-stat-label">סה״כ</span>
-            <span className="exp-stat-value">
-              <span className="exp-stat-cur">{primaryCur}</span>{' '}
-              {primaryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="exp-stat-sep" />
-          <div className="exp-stat">
-            <span className="exp-stat-label">ממוצע יומי</span>
-            <span className="exp-stat-value">
-              <span className="exp-stat-cur">{primaryCur}</span>{' '}
-              {dailyAvg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── CURRENCY FILTER ── */}
-      {allCurrencies.length > 1 && (
-        <div className="exp-cur-pills">
-          {allCurrencies.map(cur => (
-            <button key={cur}
-              className={`exp-cur-pill${primaryCur === cur ? ' active' : ''}`}
-              onClick={() => setFilterCur(cur === filterCur ? null : cur)}>
-              {cur} · {totals[cur].toFixed(0)}
+          {allCurrencies.map((cur, i) => (
+            <button
+              key={cur}
+              className={`exp-stat exp-stat--btn${primaryCur === cur ? ' exp-stat--sel' : ''}`}
+              onClick={() => setFilterCur(cur === filterCur ? null : cur)}
+              title="לחץ לסינון תרשים">
+              <span className="exp-stat-label">סה״כ {cur}</span>
+              <span className="exp-stat-value">
+                {totals[cur].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+              {i < allCurrencies.length - 1 && <span className="exp-stat-sep-inline" />}
             </button>
           ))}
+          {dailyAvg > 0 && (
+            <>
+              <div className="exp-stat-sep" />
+              <div className="exp-stat">
+                <span className="exp-stat-label">ממוצע יומי</span>
+                <span className="exp-stat-value">
+                  <span className="exp-stat-cur">{primaryCur}</span>{' '}
+                  {dailyAvg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
 

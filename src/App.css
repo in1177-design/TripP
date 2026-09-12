@@ -671,7 +671,22 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   margin-bottom: 14px; overflow: hidden;
 }
 .exp-stat { flex: 1; display: flex; flex-direction: column; padding: 18px 22px; }
-.exp-stat-sep { width: 1px; background: rgba(255,255,255,.1); margin: 14px 0; }
+/* Clickable stat tile (currency buttons inside stats bar) */
+.exp-stat--btn {
+  background: transparent; border: none; cursor: pointer; font-family: inherit;
+  text-align: right; transition: background .15s; border-radius: 0;
+  position: relative;
+}
+.exp-stat--btn:hover { background: rgba(255,255,255,.06); }
+.exp-stat--sel { background: rgba(232,255,61,.12) !important; }
+.exp-stat--sel .exp-stat-label { color: rgba(232,255,61,.75) !important; }
+.exp-stat--sel .exp-stat-value { color: var(--yellow) !important; }
+/* inline separator inside a button */
+.exp-stat-sep-inline {
+  position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px;
+  background: rgba(255,255,255,.1);
+}
+.exp-stat-sep { width: 1px; background: rgba(255,255,255,.1); margin: 14px 0; flex-shrink: 0; }
 .exp-stat-label {
   font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
   color: rgba(255,255,255,.42); margin-bottom: 6px;
