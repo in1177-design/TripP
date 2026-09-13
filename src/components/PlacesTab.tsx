@@ -17,19 +17,46 @@ const FOOD_TYPES = new Set<PlaceType>(['מסעדה', 'קפה']);
 type CityTab = 'attractions' | 'food';
 type FilterKey = 'הכל' | 'must';
 
-// Normalize Latin city names → Hebrew canonical names
+// Normalize city names (Latin or variant Hebrew) → canonical Hebrew
 const CITY_ALIASES: Record<string, string> = {
-  'zakopane':  'זקופנה',
-  'krakow':    'קראקוב',
-  'kraków':    'קראקוב',
-  'cracow':    'קראקוב',
-  'wieliczka': 'וייליצ\'קה',
-  'warsaw':    'ורשה',
-  'warszawa':  'ורשה',
+  // פולין
+  'krakow': 'קרקוב', 'kraków': 'קרקוב', 'cracow': 'קרקוב', 'krakov': 'קרקוב',
+  'קראקוב': 'קרקוב', 'קרקוב': 'קרקוב',
+  'zakopane': 'זקופנה', 'זקופנה': 'זקופנה',
+  'warsaw': 'ורשה', 'warszawa': 'ורשה', 'ורשה': 'ורשה',
+  'wieliczka': 'ויליצ\'קה', 'ויליצ\'קה': 'ויליצ\'קה',
+  'gdansk': 'גדנסק', 'gdańsk': 'גדנסק', 'גדנסק': 'גדנסק',
+  'wroclaw': 'ורוצלב', 'wrocław': 'ורוצלב', 'ורוצלב': 'ורוצלב',
+  // ישראל
+  'tel aviv': 'תל אביב', 'tel-aviv': 'תל אביב',
+  'jerusalem': 'ירושלים', 'haifa': 'חיפה', 'eilat': 'אילת',
+  // אירופה
+  'prague': 'פראג', 'praha': 'פראג', 'פראג': 'פראג',
+  'budapest': 'בודפשט', 'בודפשט': 'בודפשט',
+  'vienna': 'וינה', 'wien': 'וינה', 'וינה': 'וינה',
+  'paris': 'פריז', 'פריז': 'פריז',
+  'rome': 'רומא', 'roma': 'רומא', 'רומא': 'רומא',
+  'barcelona': 'ברצלונה', 'ברצלונה': 'ברצלונה',
+  'madrid': 'מדריד', 'מדריד': 'מדריד',
+  'amsterdam': 'אמסטרדם', 'אמסטרדם': 'אמסטרדם',
+  'berlin': 'ברלין', 'ברלין': 'ברלין',
+  'london': 'לונדון', 'לונדון': 'לונדון',
+  'athens': 'אתונה', 'athina': 'אתונה', 'אתונה': 'אתונה',
+  'lisbon': 'ליסבון', 'lisboa': 'ליסבון', 'ליסבון': 'ליסבון',
+  'porto': 'פורטו', 'פורטו': 'פורטו',
+  'istanbul': 'איסטנבול', 'איסטנבול': 'איסטנבול',
+  'dubai': 'דובאי', 'דובאי': 'דובאי',
+  'tokyo': 'טוקיו', 'טוקיו': 'טוקיו',
+  'bangkok': 'בנגקוק', 'בנגקוק': 'בנגקוק',
+  'new york': 'ניו יורק', 'new york city': 'ניו יורק',
+  'zator': 'זאטור', 'זאטור': 'זאטור',
 };
+
+/** Normalize a city name to canonical Hebrew. Used both when displaying and when saving. */
 function normalizeCity(city: string): string {
-  if (!city) return 'כללי';
-  return CITY_ALIASES[city.trim().toLowerCase()] ?? city.trim();
+  if (!city?.trim()) return 'כללי';
+  const key = city.trim().toLowerCase();
+  return CITY_ALIASES[key] ?? city.trim();
 }
 
 // Build sorted trip-date list (safe for all timezones)
@@ -245,10 +272,12 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
   function save() {
     if (!form.nameHe.trim() && !form.nameEn?.trim()) return;
+    // Always store city in canonical Hebrew
+    const toSave = { ...form, city: form.city ? normalizeCity(form.city) : form.city };
     if (editingId) {
-      onChange({ ...trip, places: trip.places.map(p => p.id === editingId ? { ...form, id: editingId } : p) });
+      onChange({ ...trip, places: trip.places.map(p => p.id === editingId ? { ...toSave, id: editingId } : p) });
     } else {
-      onChange({ ...trip, places: [...trip.places, { ...form, id: generateId() }] });
+      onChange({ ...trip, places: [...trip.places, { ...toSave, id: generateId() }] });
     }
     closeModal();
   }
@@ -277,11 +306,14 @@ export default function PlacesTab({ trip, onChange }: Props) {
     try {
       // Pass full query (with address) as primary, Hebrew name as hint
       const result = await enrichPlace(searchQuery, trip.destination, form.nameHe.trim() || undefined);
-      // Apply AI result to form
-      if (!form.nameHe.trim() && result.nameHe) {
-        setForm(f => ({ ...f, ...result, nameHe: result.nameHe ?? f.nameHe }));
+      // Apply AI result to form — always normalize city to Hebrew
+      const normalizedResult = result.city
+        ? { ...result, city: normalizeCity(result.city) }
+        : result;
+      if (!form.nameHe.trim() && normalizedResult.nameHe) {
+        setForm(f => ({ ...f, ...normalizedResult, nameHe: normalizedResult.nameHe ?? f.nameHe }));
       } else {
-        setForm(f => ({ ...f, ...result }));
+        setForm(f => ({ ...f, ...normalizedResult }));
       }
       // If AI found a website, fetch its OG image and prepend to results
       const website = result.website || form.website;
@@ -318,9 +350,11 @@ export default function PlacesTab({ trip, onChange }: Props) {
       ]);
       // Best image: first from searchImages (OG image is prepended if found), fallback to existing
       const imgUrl = imgs[0] ?? null;
+      const enrichedCity = (enriched as { city?: string }).city;
       const updated: Place = {
         ...place,
         ...enriched,
+        ...(enrichedCity ? { city: normalizeCity(enrichedCity) } : {}),
         ...(imgUrl ? { imageUrl: imgUrl } : {}),
       };
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
