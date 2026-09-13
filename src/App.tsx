@@ -3,34 +3,51 @@ import {
   HashRouter, Routes, Route, Navigate,
   useNavigate, useParams, useLocation,
 } from 'react-router-dom';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './firebase';
 import { saveTrip, deleteTrip, subscribeTrips } from './db';
 import { generateId } from './storage';
 import type { Trip } from './types';
 import TripList from './components/TripList';
 import TripForm from './components/TripForm';
 import TripView from './components/TripView';
+import SignInScreen from './components/SignInScreen';
 import './App.css';
 
 /* ── shared state lives here ── */
 function AppContent() {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [trips,     setTrips]     = useState<Trip[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [uid,       setUid]       = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // 1. Wait for Firebase Auth to resolve
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      setUid(user?.uid ?? null);
+      setAuthReady(true);
+      if (!user) setLoading(false); // no user → stop showing spinner
+    });
+    return unsub;
+  }, []);
+
+  // 2. Once signed in, subscribe to this user's trips
+  useEffect(() => {
+    if (!authReady || !uid) return;
+    setLoading(true);
     const unsub = subscribeTrips(data => {
       setTrips(data);
       setLoading(false);
     });
     return unsub;
-  }, []);
+  }, [authReady, uid]);
 
   async function handleSaveTrip(trip: Trip) {
     await saveTrip(trip);
     navigate(`/trip/${trip.id}/dashboard`, { replace: true });
   }
 
-  // Update within TripView — no navigation, just save
   async function handleUpdateTrip(trip: Trip) {
     await saveTrip(trip);
   }
@@ -38,6 +55,11 @@ function AppContent() {
   async function handleDeleteTrip(id: string) {
     await deleteTrip(id);
     navigate('/', { replace: true });
+  }
+
+  // Show sign-in screen when auth resolved but no user
+  if (authReady && !uid) {
+    return <SignInScreen />;
   }
 
   if (loading) {
@@ -52,7 +74,6 @@ function AppContent() {
   }
 
   const location = useLocation();
-  // On trip view pages the hero carries all navigation — hide the top navbar
   const onTripView = /^\/trip\/[^/]+\/(?!edit)/.test(location.pathname);
 
   return (
@@ -63,14 +84,23 @@ function AppContent() {
             <button className="logo-btn" onClick={() => navigate('/')}>
               ✈️ MyTrip
             </button>
-            <Routes>
-              <Route path="/" element={null} />
-              <Route path="*" element={
-                <button className="back-btn" onClick={() => navigate('/')}>
-                  ← כל הטיולים
-                </button>
-              } />
-            </Routes>
+            <div className="header-right">
+              <Routes>
+                <Route path="/" element={null} />
+                <Route path="*" element={
+                  <button className="back-btn" onClick={() => navigate('/')}>
+                    ← כל הטיולים
+                  </button>
+                } />
+              </Routes>
+              <button
+                className="signout-btn"
+                onClick={() => signOut(auth)}
+                title="יציאה"
+              >
+                יציאה
+              </button>
+            </div>
           </div>
         </header>
       )}
@@ -86,7 +116,7 @@ function AppContent() {
           } />
 
           <Route path="/new" element={
-            <NewTripWrapper onSave={handleSaveTrip} onCancel={() => navigate('/')} />
+            <NewTripWrapper uid={uid} onSave={handleSaveTrip} onCancel={() => navigate('/')} />
           } />
 
           <Route path="/trip/:tripId/dashboard" element={
@@ -109,7 +139,6 @@ function AppContent() {
             />
           } />
 
-          {/* fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -120,22 +149,24 @@ function AppContent() {
 /* ── route wrappers ── */
 
 function NewTripWrapper({
-  onSave, onCancel,
-}: { onSave: (t: Trip) => Promise<void>; onCancel: () => void }) {
+  uid, onSave, onCancel,
+}: { uid: string | null; onSave: (t: Trip) => Promise<void>; onCancel: () => void }) {
   const [blank] = useState<Trip>(() => ({
-    id: generateId(),
-    destination: '',
-    startDate: '',
-    endDate: '',
-    travelers: 2,
-    style: [],
-    notes: '',
-    documents: [],
-    places: [],
-    schedule: [],
-    expenses: [],
-    journalEntries: [],
-    phase: 'before',
+    id:              generateId(),
+    ownerId:         uid ?? undefined,
+    participantUids: uid ? [uid] : [],
+    destination:     '',
+    startDate:       '',
+    endDate:         '',
+    travelers:       2,
+    style:           [],
+    notes:           '',
+    documents:       [],
+    places:          [],
+    schedule:        [],
+    expenses:        [],
+    journalEntries:  [],
+    phase:           'before',
   }));
   return <TripForm trip={blank} onSave={onSave} onCancel={onCancel} />;
 }
@@ -144,8 +175,8 @@ function EditTripWrapper({
   trips, onSave,
 }: { trips: Trip[]; onSave: (t: Trip) => Promise<void> }) {
   const { tripId } = useParams<{ tripId: string }>();
-  const navigate = useNavigate();
-  const trip = trips.find(t => t.id === tripId);
+  const navigate   = useNavigate();
+  const trip       = trips.find(t => t.id === tripId);
   if (!trip) return <Navigate to="/" replace />;
   return (
     <TripForm
@@ -164,8 +195,8 @@ function TripViewWrapper({
   onDelete: (id: string) => Promise<void>;
 }) {
   const { tripId } = useParams<{ tripId: string }>();
-  const navigate = useNavigate();
-  const trip = trips.find(t => t.id === tripId);
+  const navigate   = useNavigate();
+  const trip       = trips.find(t => t.id === tripId);
   if (!trip) return <Navigate to="/" replace />;
   return (
     <TripView

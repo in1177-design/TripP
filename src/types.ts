@@ -18,8 +18,20 @@ export interface Traveler {
   avatar?: string; // image URL; if absent, initials are shown
 }
 
+export type TripRole = 'owner' | 'editor' | 'viewer';
+
+export interface TripParticipant {
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: TripRole;
+}
+
 export interface Trip {
   id: string;
+  ownerId?: string;             // Firebase Auth UID of creator
+  participants?: TripParticipant[]; // shared editors/viewers
+  participantUids?: string[];   // flat list for Firestore array-contains queries
   destination: string;
   startDate: string;
   endDate: string;

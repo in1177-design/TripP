@@ -1,17 +1,12 @@
 import {
-  collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
-  query, orderBy,
+  collection, doc, setDoc, deleteDoc, onSnapshot,
+  query, orderBy, where,
 } from 'firebase/firestore';
 import type { Unsubscribe } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import type { Trip } from './types';
 
 const TRIPS = 'trips';
-
-export async function fetchTrips(): Promise<Trip[]> {
-  const snap = await getDocs(query(collection(db, TRIPS), orderBy('startDate', 'desc')));
-  return snap.docs.map(d => d.data() as Trip);
-}
 
 export function stripUndefined(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(stripUndefined);
@@ -33,9 +28,45 @@ export async function deleteTrip(id: string): Promise<void> {
   await deleteDoc(doc(db, TRIPS, id));
 }
 
+/**
+ * Subscribe to all trips owned by or shared with the current user.
+ * Requires the user to be signed in.
+ */
 export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
-  const q = query(collection(db, TRIPS), orderBy('startDate', 'desc'));
-  return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => d.data() as Trip));
-  });
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    // Return a no-op unsubscribe; App.tsx will retry once auth is ready
+    callback([]);
+    return () => {};
+  }
+
+  // Two separate queries merged client-side (Firestore doesn't support OR across fields)
+  const qOwned = query(
+    collection(db, TRIPS),
+    where('ownerId', '==', uid),
+    orderBy('startDate', 'desc'),
+  );
+  const qShared = query(
+    collection(db, TRIPS),
+    where('participantUids', 'array-contains', uid),
+    orderBy('startDate', 'desc'),
+  );
+
+  let ownedTrips:  Trip[] = [];
+  let sharedTrips: Trip[] = [];
+
+  function merge() {
+    const seen = new Set<string>();
+    const all: Trip[] = [];
+    for (const t of [...ownedTrips, ...sharedTrips]) {
+      if (!seen.has(t.id)) { seen.add(t.id); all.push(t); }
+    }
+    all.sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
+    callback(all);
+  }
+
+  const unsubOwned  = onSnapshot(qOwned,  snap => { ownedTrips  = snap.docs.map(d => d.data() as Trip); merge(); });
+  const unsubShared = onSnapshot(qShared, snap => { sharedTrips = snap.docs.map(d => d.data() as Trip); merge(); });
+
+  return () => { unsubOwned(); unsubShared(); };
 }
