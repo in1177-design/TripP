@@ -80,12 +80,14 @@ export interface DaySchedule {
 export type ItemType = 'flight' | 'hotel' | 'car' | 'activity' | 'food' | 'other';
 export type ItemStatus = 'planned' | 'paid';
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner';
+export type DayPeriod = 'morning' | 'afternoon' | 'evening' | 'unset';
 
 export interface ItineraryItem {
   id: string;
   date: string;
   type: ItemType;
-  slot?: MealSlot;
+  slot?: MealSlot;    // kept for backward compat
+  period?: DayPeriod; // new: time-of-day label
   name: string;
   time?: string;
   cost?: number;

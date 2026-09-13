@@ -539,7 +539,7 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
           ) : (
             <div className="exp-stats-empty">
               <p>הגדר שערי חליפין כדי לראות התפלגות בשקלים</p>
-              <button className="exp-rates-btn-big" onClick={() => setShowRatesEditor(true)}>
+              <button className="exp-rates-btn-big" onClick={() => setShowCatEditor(true)}>
                 ⚙️ הגדרת שערים
               </button>
             </div>
