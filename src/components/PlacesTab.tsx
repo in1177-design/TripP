@@ -218,7 +218,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
   }
 
   function save() {
-    if (!form.nameHe.trim()) return;
+    if (!form.nameHe.trim() && !form.nameEn?.trim()) return;
     if (editingId) {
       onChange({ ...trip, places: trip.places.map(p => p.id === editingId ? { ...form, id: editingId } : p) });
     } else {
@@ -238,19 +238,23 @@ export default function PlacesTab({ trip, onChange }: Props) {
   async function handleAIEnrich() {
     const searchName = form.nameEn?.trim() || form.nameHe.trim();
     if (!searchName) return;
+    // Build a richer query: name + address if available
+    const searchQuery = form.address?.trim()
+      ? `${searchName}, ${form.address.trim()}`
+      : searchName;
     setAiLoading(true); setAiError('');
-    // Kick off image search in parallel (don't wait for it to finish first)
+    // Kick off image search in parallel using the name (address confuses image search)
     setImgSearching(true); setImgResults([]);
     searchImages(searchName).then(imgs => {
       setImgResults(imgs); setImgSearching(false);
     });
     try {
-      // Pass English (or whatever was typed) as the primary search term, Hebrew as hint
-      const result = await enrichPlace(searchName, trip.destination, form.nameHe.trim() || undefined);
+      // Pass full query (with address) as primary, Hebrew name as hint
+      const result = await enrichPlace(searchQuery, trip.destination, form.nameHe.trim() || undefined);
       // Fill in nameHe from AI if we searched by English and nameHe was empty
       if (!form.nameHe.trim() && result.nameHe) {
         setForm(f => ({ ...f, ...result, nameHe: result.nameHe ?? f.nameHe }));
-        // If name was missing, re-search images with the now-known English name
+        // Re-search images with the now-known English name for better results
         if (result.nameEn) {
           searchImages(result.nameEn).then(imgs => {
             setImgResults(prev => [...new Set([...imgs, ...prev])]);
@@ -624,7 +628,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
               <div className="field-row">
                 <div className="field">
-                  <label>שם בעברית *</label>
+                  <label>שם בעברית</label>
                   <input value={form.nameHe} onChange={e => setForm(f => ({ ...f, nameHe: e.target.value }))} placeholder="שם המקום" />
                 </div>
                 <div className="field">
@@ -703,7 +707,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-primary" onClick={save}>שמור</button>
+                <button type="button" className="btn-primary" onClick={save}
+                  disabled={!form.nameHe.trim() && !form.nameEn?.trim()}>שמור</button>
                 <button type="button" className="btn-secondary" onClick={closeModal}>ביטול</button>
               </div>
             </div>
