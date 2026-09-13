@@ -14,6 +14,34 @@ const ITEM_ICONS: Record<ItemType, string> = {
   flight: '✈️', hotel: '🏨', car: '🚗', activity: '🎯', food: '🍽️', other: '📌'
 };
 
+// ── Same SVG icons & colors as the Expenses budget tab ─────────────────────
+interface IconDef { paths?: string[]; circles?: { cx: number; cy: number; r: number }[] }
+const CAL_ICON_DEFS: Record<string, IconDef> = {
+  flight: { paths: ['M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z'] },
+  hotel:  { paths: ['M2 4v16','M2 8h18a2 2 0 0 1 2 2v10','M2 17h20','M6 8v9'] },
+  activity: { paths: ['M20 10c0 6-8 13-8 13s-8-7-8-13a8 8 0 0 1 16 0Z'], circles: [{ cx: 12, cy: 10, r: 3 }] },
+  food:   { paths: ['M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2','M7 2v20','M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3','M21 15v7'] },
+};
+const CAL_ICON_COLORS: Record<string, string> = {
+  flight:   '#3498db',  // same as 'טיסות' in ExpensesTab
+  hotel:    '#e74c3c',  // same as 'לינה'
+  activity: '#e91e63',  // same as 'אטרקציות'
+  food:     '#2dc76d',  // same as 'מסעדות'
+};
+
+function CalDayIcon({ type, size = 9 }: { type: string; size?: number }) {
+  const def = CAL_ICON_DEFS[type];
+  if (!def) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+      style={{ display: 'block', flexShrink: 0 }}>
+      {def.paths?.map((d, i) => <path key={i} d={d} />)}
+      {def.circles?.map((c, i) => <circle key={i} cx={c.cx} cy={c.cy} r={c.r} fill="white" stroke="none" />)}
+    </svg>
+  );
+}
+
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: '🥐 בוקר', lunch: '🍜 צהריים', dinner: '🍷 ערב'
 };
@@ -403,10 +431,10 @@ function CalendarGrid({
                 <span className="icd-foot">
                   {hasAny ? (
                     <>
-                      {hasFlights    && <span className="icd-icon icd-icon--flight"  title="טיסה">✈️</span>}
-                      {hasStay       && <span className="icd-icon icd-icon--hotel"   title="לינה">🏨</span>}
-                      {hasActivities && <span className="icd-icon icd-icon--act"     title="פעילות">🎯</span>}
-                      {hasFood       && <span className="icd-icon icd-icon--food"    title="אוכל">🍽️</span>}
+                      {hasFlights    && <span className="icd-icon" style={{ background: CAL_ICON_COLORS.flight }}><CalDayIcon type="flight" /></span>}
+                      {hasStay       && <span className="icd-icon" style={{ background: CAL_ICON_COLORS.hotel }}><CalDayIcon type="hotel" /></span>}
+                      {hasActivities && <span className="icd-icon" style={{ background: CAL_ICON_COLORS.activity }}><CalDayIcon type="activity" /></span>}
+                      {hasFood       && <span className="icd-icon" style={{ background: CAL_ICON_COLORS.food }}><CalDayIcon type="food" /></span>}
                     </>
                   ) : (
                     <span className="icd-dot icd-dot--empty" />
