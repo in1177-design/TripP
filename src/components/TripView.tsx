@@ -87,36 +87,41 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
     navigate(`/trip/${tripId}/${newTab}`, { replace: true });
   }
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'dashboard',  label: 'דשבורד',  icon: '🏠' },
-    { key: 'itinerary',  label: 'מסלול',   icon: '🗓️' },
-    { key: 'places',     label: 'בנק רעיונות', icon: '💡' },
-    { key: 'budget',     label: 'תקציב',   icon: '💰' },
-    { key: 'settings',   label: 'הגדרות',  icon: '⚙️' },
-    { key: 'journal',    label: 'יומן',    icon: '📖' },
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'dashboard',  label: 'דשבורד'       },
+    { key: 'itinerary',  label: 'מסלול'        },
+    { key: 'budget',     label: 'תקציב'        },
+    { key: 'places',     label: 'בנק רעיונות'  },
+    { key: 'settings',   label: 'הגדרות'       },
   ];
 
   const flights = trip.flights || [];
 
   return (
     <div className="trip-view">
+      {/* ── TOP NAV (above hero) ── */}
+      <nav className="trip-topnav" dir="rtl">
+        <h2 className="trip-topnav-title">{trip.destination}</h2>
+        <div className="trip-topnav-tabs">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              className={`trip-topnav-btn${activeTab === t.key ? ' active' : ''}`}
+              onClick={() => setTab(t.key)}
+            >{t.label}</button>
+          ))}
+          <button className="trip-topnav-btn trip-topnav-btn--back" onClick={() => navigate('/')}>
+            כל הטיולים ←
+          </button>
+        </div>
+      </nav>
+
       {/* ── HERO ── */}
       <div
         className="trip-hero"
         style={trip.coverImage ? { backgroundImage: `url(${trip.coverImage})` } : {}}
       >
         <div className="hero-overlay">
-          {/* Top bar */}
-          <div className="hero-topbar">
-            <button className="hero-back-btn" onClick={() => navigate('/')}>← כל הטיולים</button>
-            <button className="hero-settings-btn" onClick={() => setTab('settings')}>⚙️ הגדרות</button>
-          </div>
-
-          {/* Destination only — dates & chips removed to make room for flight cards */}
-          <div className="hero-body">
-            <h1 className="hero-destination">{trip.destination}</h1>
-          </div>
-
           {/* Flight ticket cards */}
           {flights.length > 0 && (
             <div className="hero-flights">
@@ -125,20 +130,6 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
           )}
         </div>
       </div>
-
-      {/* ── TABS ── */}
-      <nav className="tab-nav">
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            className={`tab-btn ${activeTab === t.key ? 'tab-active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            <span>{t.icon}</span>
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </nav>
 
       {/* ── CONTENT ── */}
       <div className="tab-content">
