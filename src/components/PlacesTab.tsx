@@ -187,6 +187,25 @@ async function searchImages(rawTerm: string, websiteUrl?: string): Promise<strin
   return results;
 }
 
+/**
+ * Smart merge: pick the better of two values for AI enrichment.
+ * - AI returns nothing → keep existing
+ * - Existing is empty  → use AI value
+ * - Identical          → no change
+ * - Both strings       → prefer the longer (more detailed) one
+ * - Numbers / other    → prefer AI (fresh lookup)
+ */
+function pickBest(existing: unknown, aiVal: unknown): unknown {
+  const isEmpty = (v: unknown) => v === undefined || v === null || v === '';
+  if (isEmpty(aiVal)) return existing;
+  if (isEmpty(existing)) return aiVal;
+  if (existing === aiVal) return existing;
+  if (typeof existing === 'string' && typeof aiVal === 'string') {
+    return aiVal.trim().length >= existing.trim().length ? aiVal : existing;
+  }
+  return aiVal; // numbers, booleans — prefer AI
+}
+
 /* ── Main component ────────────────────────────────────────────── */
 export default function PlacesTab({ trip, onChange }: Props) {
   const [modalOpen,     setModalOpen]     = useState(false);
@@ -316,12 +335,18 @@ export default function PlacesTab({ trip, onChange }: Props) {
       const normalizedResult = result.city
         ? { ...result, city: normalizeCity(result.city) }
         : result;
-      // Apply AI results — only overwrite fields the AI actually returned a value for.
-      // Never blank out existing data (website, nameHe, etc.) just because the AI omitted it on a second call.
-      const toApply = Object.fromEntries(
-        Object.entries(normalizedResult).filter(([, v]) => v !== undefined && v !== null && v !== '')
-      );
-      setForm(f => ({ ...f, ...toApply }));
+      // Smart merge: for each field pick the better value (see pickBest helper).
+      // nameHe is always the user's own entry — never overwrite it with the AI version.
+      setForm(f => {
+        const next = { ...f };
+        for (const [key, aiVal] of Object.entries(normalizedResult)) {
+          if (key === 'nameHe') continue; // user's own text — never overwrite
+          const existing = (f as Record<string, unknown>)[key];
+          const best = pickBest(existing, aiVal);
+          if (best !== existing) (next as Record<string, unknown>)[key] = best;
+        }
+        return next;
+      });
       // If AI found a website, fetch its OG image and prepend to results
       const website = result.website || form.website;
       if (website) {
@@ -360,16 +385,16 @@ export default function PlacesTab({ trip, onChange }: Props) {
       // Best image: first from searchImages (OG image is prepended if found), fallback to existing
       const imgUrl = imgs[0] ?? null;
       const enrichedCity = (enriched as { city?: string }).city;
-      // Only merge fields the AI actually returned — don't clear existing data with undefined
-      const enrichedDefined = Object.fromEntries(
-        Object.entries(enriched as Record<string, unknown>).filter(([, v]) => v !== undefined && v !== null && v !== '')
-      );
-      const updated: Place = {
-        ...place,
-        ...enrichedDefined,
-        ...(enrichedCity ? { city: normalizeCity(enrichedCity) } : {}),
-        ...(imgUrl ? { imageUrl: imgUrl } : {}),
-      };
+      // Smart merge: pick the better value per field; nameHe is always the user's saved name.
+      const updatedRec = { ...(place as unknown as Record<string, unknown>) };
+      for (const [key, aiVal] of Object.entries(enriched as Record<string, unknown>)) {
+        if (key === 'nameHe' || key === 'city') continue; // handled separately
+        const best = pickBest(updatedRec[key], aiVal);
+        if (best !== updatedRec[key]) updatedRec[key] = best;
+      }
+      const updated = updatedRec as unknown as Place;
+      if (enrichedCity) updated.city = normalizeCity(enrichedCity);
+      if (imgUrl) updated.imageUrl = imgUrl;
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
       if (imgUrl) {
         setImageCache(c => ({ ...c, [place.id]: imgUrl }));
