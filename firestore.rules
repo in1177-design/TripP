@@ -1,39 +1,67 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── CURRENT STATE (intentionally permissive) ───────────────────────────
-    // The app does not yet implement per-user ownership or sharing.
-    // All authenticated Firebase users (including anonymous sessions) can
-    // read and write all trips.  This is acceptable for a personal/family app
-    // where the Firebase project is private and the owner controls access.
-    //
-    // NOTE: These rules require Firebase Auth to be enabled and every client
-    // to sign in (at minimum anonymously) before accessing Firestore.
-    // The current codebase uses anonymous sign-in automatically on startup.
-    //
-    // ─── MIGRATION PATH ─────────────────────────────────────────────────────
-    // When proper multi-user support is needed, replace this block with:
-    //
-    //   match /trips/{tripId} {
-    //     // Owner can do everything
-    //     allow read, write, delete: if request.auth != null
-    //                                && request.auth.uid == resource.data.ownerId;
-    //     // Shared users can read only
-    //     allow read: if request.auth != null
-    //                 && request.auth.uid in resource.data.sharedWith;
-    //   }
-    //
-    // Before deploying strict rules, run the migration script:
-    //   npx tsx scripts/migrate-add-owners.ts
-    // which stamps every existing trip document with ownerId = <your UID>.
-    // ────────────────────────────────────────────────────────────────────────
+    // ── Helper functions ──────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(tripData) {
+      return isSignedIn() && request.auth.uid == tripData.ownerId;
+    }
+
+    // participantUids contains ALL shared users (editors + viewers)
+    function isParticipant(tripData) {
+      return isSignedIn()
+        && tripData.participantUids is list
+        && request.auth.uid in tripData.participantUids;
+    }
+
+    // editorUids contains only users with write permission
+    // Falls back to participantUids if editorUids is not set (backwards compat)
+    function isEditor(tripData) {
+      return isSignedIn()
+        && (
+          (tripData.keys().hasAll(['editorUids'])
+            && tripData.editorUids is list
+            && request.auth.uid in tripData.editorUids)
+          ||
+          (!tripData.keys().hasAll(['editorUids'])
+            && tripData.participantUids is list
+            && request.auth.uid in tripData.participantUids)
+        );
+    }
+
+    // ── Trips ─────────────────────────────────────────────────────────────────
 
     match /trips/{tripId} {
-      // Any authenticated session (incl. anonymous) can read / write.
-      // This preserves existing behaviour while blocking completely
-      // unauthenticated access from scripts or unknown clients.
-      allow read, write: if request.auth != null;
+
+      // Read: owner or any participant
+      allow read: if isOwner(resource.data) || isParticipant(resource.data);
+
+      // Create: signed-in user who stamps themselves as owner
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      // Update: owner or editor; ownerId must not change
+      allow update: if (isOwner(resource.data) || isEditor(resource.data))
+        && request.resource.data.ownerId == resource.data.ownerId;
+
+      // Delete: owner only
+      allow delete: if isOwner(resource.data);
+    }
+
+    // ── Rate limit counters — server-side Admin SDK only ───────────────────────
+    match /_rateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Default deny ──────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

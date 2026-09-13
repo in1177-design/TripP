@@ -1,54 +1,73 @@
-/**
- * Firebase Cloud Function — AI place enrichment proxy.
- *
- * Keeps the Anthropic API key server-side.
- * Requires a valid Firebase Auth token (anonymous or real user).
- * Rate-limited by Firebase (maxInstances) and by Anthropic quotas.
- */
-
+import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
-import { initializeApp } from 'firebase-admin/app';
+import {
+  FieldValue, Timestamp,
+} from 'firebase-admin/firestore';
 
-initializeApp();
+// Server-side secret — never exposed to client bundle
+const ANTHROPIC_KEY = defineSecret('ANTHROPIC_KEY');
 
-const anthropicKey = defineSecret('ANTHROPIC_KEY');
+admin.initializeApp();
+const db = admin.firestore();
 
-const ALLOWED_TYPES = [
-  'אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר',
-] as const;
-type PlaceType = (typeof ALLOWED_TYPES)[number];
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface EnrichRequest {
-  placeName: string;
+  placeName:       string;
   tripDestination: string;
-  nameHe?: string;
+  nameHe?:         string;
+  tripId?:         string; // optional — used to verify user has trip access
 }
 
-interface EnrichResult {
-  nameEn?: string;
-  nameHe?: string;
-  city?: string;
-  area?: string;
-  address?: string;
-  type?: PlaceType;
-  priceChild?: number;
-  priceAdult?: number;
-  rating?: number;
-  travelTime?: string;
-  description?: string;
-  website?: string;
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+
+const DAILY_USER_QUOTA   = 20;   // calls per user per day
+const DAILY_GLOBAL_QUOTA = 500;  // calls total per day
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 }
 
-export const enrichPlace = onCall<EnrichRequest, Promise<EnrichResult>>(
+async function checkRateLimits(uid: string): Promise<void> {
+  const day = todayKey();
+
+  // User counter
+  const userRef  = db.doc(`_rateLimits/users/${uid}/${day}`);
+  // Global counter
+  const globalRef = db.doc(`_rateLimits/global/${day}/count`);
+
+  await db.runTransaction(async tx => {
+    const [userSnap, globalSnap] = await Promise.all([
+      tx.get(userRef),
+      tx.get(globalRef),
+    ]);
+
+    const userCount   = (userSnap.data()?.n   as number | undefined) ?? 0;
+    const globalCount = (globalSnap.data()?.n as number | undefined) ?? 0;
+
+    if (userCount >= DAILY_USER_QUOTA) {
+      throw new HttpsError('resource-exhausted',
+        `הגעת למגבלה היומית (${DAILY_USER_QUOTA} קריאות). נסי שוב מחר.`);
+    }
+    if (globalCount >= DAILY_GLOBAL_QUOTA) {
+      throw new HttpsError('resource-exhausted',
+        'המגבלה היומית הכוללת הגיעה לסיומה. נסי שוב מחר.');
+    }
+
+    tx.set(userRef,   { n: FieldValue.increment(1), updatedAt: Timestamp.now() }, { merge: true });
+    tx.set(globalRef, { n: FieldValue.increment(1), updatedAt: Timestamp.now() }, { merge: true });
+  });
+}
+
+// ── Main function ─────────────────────────────────────────────────────────────
+
+export const enrichPlace = onCall(
   {
-    region: 'us-central1',
-    secrets: [anthropicKey],
-    maxInstances: 5,        // hard cap on concurrent invocations
+    secrets:        [ANTHROPIC_KEY],
+    maxInstances:   5,
     timeoutSeconds: 30,
-    memory: '256MiB',
-    // Only allow requests from the deployed origin and local dev.
-    // This is defence-in-depth; auth token validation is the primary gate.
+    memory:         '256MiB',
     cors: [
       'https://in1177-design.github.io',
       'http://localhost:5173',
@@ -56,137 +75,127 @@ export const enrichPlace = onCall<EnrichRequest, Promise<EnrichResult>>(
     ],
   },
   async (request) => {
-    // ── 1. Require Firebase Auth (anonymous sign-in is accepted) ──────
+    // 1. Require a real (non-anonymous) Google account
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Authentication required');
+      throw new HttpsError('unauthenticated', 'נדרשת כניסה לחשבון.');
     }
 
-    // ── 2. Validate and sanitise inputs ──────────────────────────────
-    const { placeName, tripDestination, nameHe } = request.data;
-
-    if (
-      typeof placeName !== 'string' ||
-      !placeName.trim() ||
-      placeName.length > 300
-    ) {
-      throw new HttpsError('invalid-argument', 'Invalid place name');
-    }
-    if (
-      typeof tripDestination !== 'string' ||
-      !tripDestination.trim() ||
-      tripDestination.length > 150
-    ) {
-      throw new HttpsError('invalid-argument', 'Invalid destination');
-    }
-    if (
-      nameHe !== undefined &&
-      (typeof nameHe !== 'string' || nameHe.length > 300)
-    ) {
-      throw new HttpsError('invalid-argument', 'Invalid nameHe');
+    const provider = request.auth.token.firebase?.sign_in_provider;
+    if (provider === 'anonymous') {
+      throw new HttpsError('permission-denied',
+        'יש להתחבר עם חשבון Google כדי להשתמש ב-AI.');
     }
 
-    const safeName = placeName.trim().slice(0, 300);
-    const safeDest = tripDestination.trim().slice(0, 150);
-    const safeNameHe = nameHe?.trim().slice(0, 300);
+    const uid = request.auth.uid;
 
-    // ── 3. Build prompt server-side (never constructed by the client) ─
-    const prompt =
-      `אתה עוזר לתכנן טיול ל${safeDest}.\n` +
-      `המשתמש מוסיף מקום בשם: "${safeName}"` +
-      (safeNameHe && safeNameHe !== safeName ? ` (${safeNameHe})` : '') +
-      `\n\nחשוב: המקום חייב להיות ממוקם ב${safeDest} או באזורה.\n` +
-      `ענה על מה שאתה יודע. החזר JSON בלבד (ללא טקסט נוסף).\n` +
-      `{\n` +
-      `  "nameEn": "שם באנגלית",\n` +
-      `  "nameHe": "שם בעברית",\n` +
-      `  "city": "שם העיר בעברית (חייב להיות עיר ב${safeDest})",\n` +
-      `  "area": "שכונה או אזור או null",\n` +
-      `  "address": "כתובת רחוב מלאה או null",\n` +
-      `  "type": "אחד מ: ${ALLOWED_TYPES.join(', ')}",\n` +
-      `  "priceChild": מחיר ילד (מספר) או null,\n` +
-      `  "priceAdult": מחיר מבוגר (מספר) או null,\n` +
-      `  "rating": דירוג 1–5 (מספר) או null,\n` +
-      `  "travelTime": "זמן נסיעה ממרכז העיר או null",\n` +
-      `  "description": "תיאור קצר בעברית, משפט אחד",\n` +
-      `  "website": "URL רלוונטי או null"\n` +
-      `}`;
-
-    // ── 4. Call Anthropic (key never leaves the server) ───────────────
-    const apiKey = anthropicKey.value();
-    if (!apiKey) {
-      throw new HttpsError('internal', 'Service not configured');
+    // 2. Validate input
+    const data = request.data as EnrichRequest;
+    if (!data?.placeName || typeof data.placeName !== 'string') {
+      throw new HttpsError('invalid-argument', 'שדה placeName חסר.');
+    }
+    if (!data?.tripDestination || typeof data.tripDestination !== 'string') {
+      throw new HttpsError('invalid-argument', 'שדה tripDestination חסר.');
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25_000);
+    const placeName       = data.placeName.slice(0, 300).trim();
+    const tripDestination = data.tripDestination.slice(0, 150).trim();
+    const nameHe          = typeof data.nameHe === 'string'
+      ? data.nameHe.slice(0, 150).trim()
+      : undefined;
 
-    let anthropicRes: Response;
-    try {
-      anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          // No 'anthropic-dangerous-direct-browser-access' — server-side is fine
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 600,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-    } finally {
-      clearTimeout(timer);
+    // 3. Optionally verify trip access
+    if (data.tripId && typeof data.tripId === 'string') {
+      const tripSnap = await db.doc(`trips/${data.tripId}`).get();
+      if (!tripSnap.exists) {
+        throw new HttpsError('not-found', 'הטיול לא נמצא.');
+      }
+      const tripData = tripSnap.data() as { ownerId?: string; participantUids?: string[] } | undefined;
+      const hasAccess =
+        tripData?.ownerId === uid ||
+        (tripData?.participantUids ?? []).includes(uid);
+      if (!hasAccess) {
+        throw new HttpsError('permission-denied', 'אין גישה לטיול זה.');
+      }
     }
 
-    if (!anthropicRes.ok) {
-      // Log internally but never expose raw upstream error to the client
-      console.error(
-        `Anthropic error ${anthropicRes.status} for uid=${request.auth.uid}`,
-      );
-      throw new HttpsError('internal', 'AI service error');
+    // 4. Rate-limit check (atomic transaction)
+    await checkRateLimits(uid);
+
+    // 5. Call Anthropic
+    const apiKey = ANTHROPIC_KEY.value();
+    if (!apiKey) throw new HttpsError('internal', 'מפתח API חסר.');
+
+    const prompt = `אתה עוזר לתכנן טיול ל${tripDestination}.
+המשתמש מוסיף מקום בשם: "${placeName}"${nameHe && nameHe !== placeName ? ` (${nameHe})` : ''}
+
+חשוב: המקום חייב להיות ממוקם ב${tripDestination} או באזורה. אם קיימים מקומות בשם זהה במדינות אחרות, התייחס רק לזה שנמצא ביעד הטיול.
+
+ענה על מה שאתה יודע. החזר JSON בלבד (ללא טקסט נוסף). אם אינך בטוח בשדה מסוים — החזר את הניחוש הטוב ביותר שלך. אם אין לך שום מידע על שדה — החזר null.
+{
+  "nameEn": "שם באנגלית",
+  "nameHe": "שם בעברית",
+  "city": "שם העיר בעברית בלבד",
+  "area": "שכונה או אזור או null",
+  "address": "כתובת רחוב מלאה או null",
+  "type": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר",
+  "priceChild": מחיר ילד במטבע מקומי (מספר) או null,
+  "priceAdult": מחיר מבוגר במטבע מקומי (מספר) או null,
+  "rating": דירוג 1-5 או null,
+  "travelTime": "זמן נסיעה ממרכז העיר או null",
+  "description": "תיאור קצר בעברית, משפט אחד",
+  "website": "URL רלוונטי או null"
+}`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'x-api-key':       apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 600,
+        messages:   [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Anthropic error:', response.status, errText);
+      throw new HttpsError('internal', `שגיאת AI: ${response.status}`);
     }
 
-    // ── 5. Parse and strictly type-check the AI response ─────────────
-    const body = (await anthropicRes.json()) as {
-      content?: { text: string }[];
+    const anthropicData = await response.json() as {
+      content?: Array<{ text?: string }>;
     };
-    const rawText = body.content?.[0]?.text ?? '{}';
+    const text = anthropicData.content?.[0]?.text ?? '{}';
 
-    let parsed: Record<string, unknown>;
+    let json: Record<string, unknown>;
     try {
-      parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+      json = JSON.parse(text.replace(/```json|```/g, '').trim()) as Record<string, unknown>;
     } catch {
-      throw new HttpsError('internal', 'Unexpected AI response format');
+      console.error('Failed to parse Anthropic response:', text);
+      throw new HttpsError('internal', 'שגיאה בפענוח תגובת AI.');
     }
 
-    // Return only explicitly typed, validated fields
-    const result: EnrichResult = {};
-    if (typeof parsed.nameEn === 'string') result.nameEn = parsed.nameEn;
-    if (typeof parsed.nameHe === 'string') result.nameHe = parsed.nameHe;
-    if (typeof parsed.city === 'string') result.city = parsed.city;
-    if (typeof parsed.area === 'string') result.area = parsed.area;
-    if (typeof parsed.address === 'string') result.address = parsed.address;
-    if (ALLOWED_TYPES.includes(parsed.type as PlaceType))
-      result.type = parsed.type as PlaceType;
-    if (typeof parsed.priceChild === 'number' && parsed.priceChild >= 0)
-      result.priceChild = parsed.priceChild;
-    if (typeof parsed.priceAdult === 'number' && parsed.priceAdult >= 0)
-      result.priceAdult = parsed.priceAdult;
-    if (
-      typeof parsed.rating === 'number' &&
-      parsed.rating >= 1 &&
-      parsed.rating <= 5
-    )
-      result.rating = parsed.rating;
-    if (typeof parsed.travelTime === 'string')
-      result.travelTime = parsed.travelTime;
-    if (typeof parsed.description === 'string')
-      result.description = parsed.description;
-    if (typeof parsed.website === 'string') result.website = parsed.website;
+    const VALID_TYPES = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
 
-    return result;
+    // Return only known safe fields
+    return {
+      nameEn:      typeof json.nameEn === 'string' ? json.nameEn         : undefined,
+      nameHe:      typeof json.nameHe === 'string' ? json.nameHe         : undefined,
+      city:        typeof json.city   === 'string' ? json.city           : undefined,
+      area:        typeof json.area   === 'string' ? json.area           : undefined,
+      address:     typeof json.address === 'string' ? json.address       : undefined,
+      type:        typeof json.type   === 'string' && VALID_TYPES.includes(json.type as string)
+                     ? json.type : undefined,
+      priceChild:  typeof json.priceChild === 'number' ? json.priceChild : undefined,
+      priceAdult:  typeof json.priceAdult === 'number' ? json.priceAdult : undefined,
+      rating:      typeof json.rating     === 'number' ? json.rating     : undefined,
+      travelTime:  typeof json.travelTime === 'string' ? json.travelTime : undefined,
+      description: typeof json.description === 'string' ? json.description : undefined,
+      website:     typeof json.website     === 'string' ? json.website   : undefined,
+    };
   },
 );

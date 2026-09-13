@@ -1,19 +1,13 @@
 {
   "functions": {
     "source": "functions",
-    "predeploy": ["npm --prefix functions install", "npm --prefix functions run build"]
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" install",
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ]
   },
   "firestore": {
-    "rules": "firestore.rules"
-  },
-  "hosting": {
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }
