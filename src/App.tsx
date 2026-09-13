@@ -3,7 +3,9 @@ import {
   HashRouter, Routes, Route, Navigate,
   useNavigate, useParams, useLocation,
 } from 'react-router-dom';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { saveTrip, deleteTrip, subscribeTrips } from './db';
+import { auth } from './firebase';
 import { generateId } from './storage';
 import type { Trip } from './types';
 import TripList from './components/TripList';
@@ -15,15 +17,30 @@ import './App.css';
 function AppContent() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const navigate = useNavigate();
 
+  // Sign in anonymously so Firestore rules (request.auth != null) are satisfied
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user) {
+        setAuthReady(true);
+      } else {
+        signInAnonymously(auth).catch(console.error);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Subscribe to trips only after auth is ready
+  useEffect(() => {
+    if (!authReady) return;
     const unsub = subscribeTrips(data => {
       setTrips(data);
       setLoading(false);
     });
     return unsub;
-  }, []);
+  }, [authReady]);
 
   async function handleSaveTrip(trip: Trip) {
     await saveTrip(trip);
