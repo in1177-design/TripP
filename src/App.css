@@ -255,12 +255,16 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
    TRIP TOP NAV — above the hero
    ============================================================ */
 .trip-topnav {
-  display: flex; align-items: center; justify-content: space-between;
   background: var(--dark); color: #fff;
-  padding: 0 24px;
   height: 52px;
   position: sticky; top: 0; z-index: 200;
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+/* inner content constrained to 1100px, centered — same pattern as .header-inner */
+.trip-topnav-inner {
+  max-width: 1100px; margin: 0 auto;
+  padding: 0 20px; height: 100%;
+  display: flex; align-items: center; justify-content: space-between;
 }
 
 .trip-topnav-title {
@@ -1569,7 +1573,8 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .field-sm, .field-xs { flex: 1; }
 
   /* ── Top nav: hide title, make tabs scrollable ── */
-  .trip-topnav { padding: 0 6px; height: 48px; overflow: hidden; }
+  .trip-topnav { height: 48px; overflow: hidden; }
+  .trip-topnav-inner { padding: 0 6px; }
   .trip-topnav-title { display: none; }
   .trip-topnav-tabs {
     flex: 1; overflow-x: auto; scrollbar-width: none;

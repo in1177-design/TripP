@@ -101,18 +101,20 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
     <div className="trip-view">
       {/* ── TOP NAV (above hero) ── */}
       <nav className="trip-topnav" dir="rtl">
-        <h2 className="trip-topnav-title">{trip.destination}</h2>
-        <div className="trip-topnav-tabs">
-          {tabs.map(t => (
-            <button
-              key={t.key}
-              className={`trip-topnav-btn${activeTab === t.key ? ' active' : ''}`}
-              onClick={() => setTab(t.key)}
-            >{t.label}</button>
-          ))}
-          <button className="trip-topnav-btn trip-topnav-btn--back" onClick={() => navigate('/')}>
-            כל הטיולים ←
-          </button>
+        <div className="trip-topnav-inner">
+          <h2 className="trip-topnav-title">{trip.destination}</h2>
+          <div className="trip-topnav-tabs">
+            {tabs.map(t => (
+              <button
+                key={t.key}
+                className={`trip-topnav-btn${activeTab === t.key ? ' active' : ''}`}
+                onClick={() => setTab(t.key)}
+              >{t.label}</button>
+            ))}
+            <button className="trip-topnav-btn trip-topnav-btn--back" onClick={() => navigate('/')}>
+              כל הטיולים ←
+            </button>
+          </div>
         </div>
       </nav>
 
