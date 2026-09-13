@@ -311,6 +311,28 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   );
   const dailyILS = totalILS > 0 && tripDays > 0 ? totalILS / tripDays : 0;
 
+  // today's spending in ILS — show during the trip
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayILS = useMemo(() => {
+    return expenses.reduce((s, e) => {
+      const displayDate = (e.useDate && e.useDate > e.date) ? e.useDate : e.date;
+      // single-day expense on today
+      if (!e.dateEnd && displayDate === todayStr) {
+        return s + (e.currency === 'ILS' ? e.amount : (trip.exchangeRates?.[e.currency] ?? 0) * e.amount);
+      }
+      // multi-day expense spanning today — add its per-day share
+      if (e.dateEnd && e.date <= todayStr && e.dateEnd >= todayStr) {
+        const days = Math.max(1, daysBetween(e.date, e.dateEnd) + 1);
+        const perDay = e.amount / days;
+        return s + (e.currency === 'ILS' ? perDay : (trip.exchangeRates?.[e.currency] ?? 0) * perDay);
+      }
+      return s;
+    }, 0);
+  }, [expenses, trip.exchangeRates, todayStr]);
+  // only show the "today" block when today is within the trip
+  const isOnTrip = trip.startDate && trip.endDate
+    && todayStr >= trip.startDate && todayStr <= trip.endDate;
+
   // update a single exchange rate and save
   function saveRate(currency: string, value: string) {
     const num = parseFloat(value);
@@ -461,6 +483,20 @@ export default function ExpensesTab({ trip, onChange }: Props) {
                   {dailyILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
+              {isOnTrip && (
+                <>
+                  <div className="exp-stat-sep" />
+                  <div className="exp-stat exp-stat--today">
+                    <span className="exp-stat-label">הוצאות היום</span>
+                    <span className="exp-stat-value">
+                      <span className="exp-stat-cur">₪</span>
+                      {todayILS > 0
+                        ? todayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                        : '—'}
+                    </span>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <div className="exp-stat exp-stat--setup">
