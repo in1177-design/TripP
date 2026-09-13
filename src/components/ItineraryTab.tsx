@@ -188,8 +188,12 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
       <CalendarGrid
         dates={dates}
         activeDay={activeDay}
-        hasItems={d => dayItems(d).length > 0 || dayFlights(d).length > 0}
-        hasStay={d => dayStays(d).length > 0}
+        getDayContent={d => ({
+          hasFlights:     dayFlights(d).length > 0,
+          hasStay:        dayStays(d).length > 0,
+          hasActivities:  dayItems(d).filter(i => i.type !== 'food').length > 0,
+          hasFood:        dayItems(d).filter(i => i.type === 'food').length > 0,
+        })}
         onSelect={setActiveDay}
       />
 
@@ -354,14 +358,15 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
+interface DayContent { hasFlights: boolean; hasStay: boolean; hasActivities: boolean; hasFood: boolean; }
+
 // ---- Calendar grid ----
 function CalendarGrid({
-  dates, activeDay, hasItems, hasStay, onSelect,
+  dates, activeDay, getDayContent, onSelect,
 }: {
   dates: string[];
   activeDay: string;
-  hasItems: (date: string) => boolean;
-  hasStay: (date: string) => boolean;
+  getDayContent: (date: string) => DayContent;
   onSelect: (date: string) => void;
 }) {
   if (dates.length === 0) return null;
@@ -385,23 +390,27 @@ function CalendarGrid({
           {week.map((date, di) => {
             if (!date) return <div key={di} className="itin-cal-empty" />;
             const d = new Date(date + 'T12:00:00');
-            const stay = hasStay(date);
-            const items = hasItems(date);
+            const { hasFlights, hasStay, hasActivities, hasFood } = getDayContent(date);
+            const hasAny = hasFlights || hasStay || hasActivities || hasFood;
             return (
               <button
                 key={di}
-                className={`itin-cal-day${activeDay === date ? ' active' : ''}${stay ? ' has-stay' : ''}`}
+                className={`itin-cal-day${activeDay === date ? ' active' : ''}${hasStay ? ' has-stay' : ''}`}
                 onClick={() => onSelect(date)}
               >
                 <span className="icd-month">{MONTH_HE[d.getMonth()]}'</span>
                 <span className="icd-num">{d.getDate()}</span>
                 <span className="icd-foot">
-                  {stay
-                    ? <span className="icd-hotel" title="לינה">🏨</span>
-                    : items
-                      ? <span className="icd-dot" />
-                      : <span className="icd-dot icd-dot--empty" />
-                  }
+                  {hasAny ? (
+                    <>
+                      {hasFlights    && <span className="icd-icon icd-icon--flight"  title="טיסה">✈️</span>}
+                      {hasStay       && <span className="icd-icon icd-icon--hotel"   title="לינה">🏨</span>}
+                      {hasActivities && <span className="icd-icon icd-icon--act"     title="פעילות">🎯</span>}
+                      {hasFood       && <span className="icd-icon icd-icon--food"    title="אוכל">🍽️</span>}
+                    </>
+                  ) : (
+                    <span className="icd-dot icd-dot--empty" />
+                  )}
                 </span>
               </button>
             );
