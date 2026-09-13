@@ -1645,7 +1645,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .itin-cal-day {
   display: flex; flex-direction: column; align-items: center;
   justify-content: space-between;
-  min-height: 72px; padding: 8px 3px 6px;
+  min-height: 86px; padding: 7px 4px 6px;
   background: var(--surface); border: 1.5px solid var(--border);
   border-radius: 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s;
   font-family: inherit; position: relative; outline: none;
@@ -1659,20 +1659,29 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   background: var(--yellow); border-color: var(--yellow); color: var(--ink);
   box-shadow: 0 3px 12px rgba(0,0,0,.13);
 }
-.itin-cal-day.has-stay { border-color: #7cc8d8; }
-.itin-cal-day.has-stay.active { border-color: var(--yellow); }
+/* has-stay: thick dark border (hotel booked) */
+.itin-cal-day.has-stay { border: 2px solid var(--ink); }
+.itin-cal-day.has-stay.active { border-color: var(--ink); }
 
 .icd-month {
-  font-size: 9px; font-weight: 700; color: var(--ink-muted);
-  letter-spacing: .04em; line-height: 1;
+  font-size: 9px; font-weight: 600; color: var(--ink-muted);
+  letter-spacing: .04em; line-height: 1; align-self: flex-end; padding-left: 2px;
 }
 .itin-cal-day.active .icd-month { color: rgba(23,32,28,.5); }
 
-.icd-num { font-size: 19px; font-weight: 800; line-height: 1; }
+.icd-num { font-size: 20px; font-weight: 800; line-height: 1; margin-top: 1px; }
+
+/* City name below the date number */
+.icd-city {
+  font-size: 9px; font-weight: 500; color: var(--ink-muted);
+  line-height: 1; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; padding: 0 2px;
+}
+.itin-cal-day.active .icd-city { color: rgba(23,32,28,.55); }
 
 .icd-foot {
   display: flex; align-items: center; justify-content: center;
-  gap: 2px; min-height: 14px; flex-wrap: nowrap;
+  gap: 2px; min-height: 15px; flex-wrap: nowrap;
 }
 
 /* Budget-style icon circles — same as .exp-cat-tile-circle, scaled to 15px */
@@ -1692,7 +1701,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .icd-dot--empty { background: transparent; }
 .itin-cal-day.active .icd-dot { background: var(--ink); }
 
-.itin-cal-empty { min-height: 72px; border-radius: 12px; }
+.itin-cal-empty { min-height: 86px; border-radius: 12px; }
 
 /* ---- DAY CARD ---- */
 .itin-day-card {

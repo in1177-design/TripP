@@ -187,6 +187,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
           hasActivities:  dayItems(d).filter(i => i.type !== 'food').length > 0,
           hasFood:        dayItems(d).filter(i => i.type === 'food').length > 0,
         })}
+        getDayCity={d => dayBases[d] || ''}
         onSelect={setActiveDay}
       />
 
@@ -355,11 +356,12 @@ interface DayContent { hasFlights: boolean; hasStay: boolean; hasActivities: boo
 
 // ---- Calendar grid ----
 function CalendarGrid({
-  dates, activeDay, getDayContent, onSelect,
+  dates, activeDay, getDayContent, getDayCity, onSelect,
 }: {
   dates: string[];
   activeDay: string;
   getDayContent: (date: string) => DayContent;
+  getDayCity: (date: string) => string;
   onSelect: (date: string) => void;
 }) {
   if (dates.length === 0) return null;
@@ -385,6 +387,7 @@ function CalendarGrid({
             const d = new Date(date + 'T12:00:00');
             const { hasFlights, hasStay, hasActivities, hasFood } = getDayContent(date);
             const hasAny = hasFlights || hasStay || hasActivities || hasFood;
+            const city = getDayCity(date);
             return (
               <button
                 key={di}
@@ -393,6 +396,7 @@ function CalendarGrid({
               >
                 <span className="icd-month">{MONTH_HE[d.getMonth()]}'</span>
                 <span className="icd-num">{d.getDate()}</span>
+                {city && <span className="icd-city">{city}</span>}
                 <span className="icd-foot">
                   {hasAny ? (
                     <>
