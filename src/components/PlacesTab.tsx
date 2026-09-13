@@ -140,6 +140,20 @@ async function fetchOGImage(websiteUrl: string): Promise<string | null> {
   } catch { return null; }
 }
 
+/* ── DuckDuckGo Instant Answer — free, no API key, returns place image ── */
+async function fetchDDGImage(query: string): Promise<string | null> {
+  if (!query?.trim()) return null;
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&t=mytrip&no_html=1&skip_disambig=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // data.Image is a relative path like "/i/abc123.png"
+    if (data?.Image) return `https://duckduckgo.com${data.Image}`;
+    return null;
+  } catch { return null; }
+}
+
 /* ── Image search: Wikipedia thumbnails + optional website OG ───── */
 async function searchImages(rawTerm: string, websiteUrl?: string): Promise<string[]> {
   const clean = rawTerm.replace(/[&/].*/g, '').replace(/['''`]/g, '').trim();
@@ -174,22 +188,17 @@ async function searchImages(rawTerm: string, websiteUrl?: string): Promise<strin
     } catch { /* ignore */ }
   }
 
-  // Run Wikipedia + website OG fetch in parallel
-  const [, , ogImg] = await Promise.all([
+  // Run Wikipedia + website OG + DuckDuckGo in parallel
+  const [, , ogImg, ddgImg] = await Promise.all([
     addFromLang('en', 5),
     addFromLang('pl', 3),
     websiteUrl ? fetchOGImage(websiteUrl) : Promise.resolve(null),
+    clean ? fetchDDGImage(clean) : Promise.resolve(null),
   ]);
 
-  // Prepend OG image (it's usually the most relevant)
+  // Prepend OG image (most relevant), DDG after Wikipedia results
   if (ogImg && !results.includes(ogImg)) results.unshift(ogImg);
-
-  // If still no images, try TripAdvisor search as last resort
-  if (results.length === 0 && clean) {
-    const q = encodeURIComponent(clean);
-    const taImg = await fetchOGImage(`https://www.tripadvisor.com/Search?q=${q}`);
-    if (taImg) results.push(taImg);
-  }
+  if (ddgImg && !results.includes(ddgImg)) results.push(ddgImg);
 
   return results;
 }
@@ -251,11 +260,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
       let url = await fetchWikiImage(term);
       // 2. Official website / Facebook / Instagram OG image
       if (!url && place.website) url = await fetchOGImage(place.website);
-      // 3. TripAdvisor search as last-resort (often returns a place photo in OG)
-      if (!url) {
-        const q = encodeURIComponent(`${term}${place.city ? ' ' + place.city : ''}`);
-        url = await fetchOGImage(`https://www.tripadvisor.com/Search?q=${q}`);
-      }
+      // 3. DuckDuckGo Instant Answer (free, works for many local businesses)
+      if (!url) url = await fetchDDGImage(`${term}${place.city ? ' ' + place.city : ''}`);
       if (url) setImageCache(c => ({ ...c, [place.id]: url }));
     });
   }, [trip.places]);
