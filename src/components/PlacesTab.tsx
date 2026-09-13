@@ -14,7 +14,6 @@ const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 
 
 // Food types — shown in "אוכל" tab
 const FOOD_TYPES = new Set<PlaceType>(['מסעדה', 'קפה']);
-type CityTab = 'attractions' | 'food';
 type FilterKey = 'הכל' | 'must';
 
 // Normalize city names (Latin or variant Hebrew) → canonical Hebrew
@@ -194,7 +193,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [editingId,     setEditingId]     = useState<string | null>(null);
   const [form,          setForm]          = useState<Omit<Place, 'id'>>(blank());
   const [filter,        setFilter]        = useState<FilterKey>('הכל');
-  const [cityTabs,      setCityTabs]      = useState<Record<string, CityTab>>({});
+  const [mainTab,       setMainTab]       = useState<'attractions' | 'food'>('attractions');
+  // cityTabs removed — replaced by top-level mainTab
   const [aiLoading,     setAiLoading]     = useState(false);
   const [aiError,       setAiError]       = useState('');
   const [imgResults,    setImgResults]    = useState<string[]>([]);
@@ -230,6 +230,10 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const cityGroups = useMemo(() => {
     let places = [...trip.places];
     if (filter === 'must') places = places.filter(p => p.must);
+    // Filter by main tab
+    places = mainTab === 'food'
+      ? places.filter(p => FOOD_TYPES.has(p.type))
+      : places.filter(p => !FOOD_TYPES.has(p.type));
 
     const map: Record<string, Place[]> = {};
     places.forEach(p => {
@@ -240,16 +244,15 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
     return Object.entries(map)
       .sort(([a], [b]) => a === 'כללי' ? 1 : b === 'כללי' ? -1 : a.localeCompare(b, 'he'))
-      .map(([city, ps]) => {
-        const attractions = ps.filter(p => !FOOD_TYPES.has(p.type)).sort((a, b) => Number(b.must) - Number(a.must));
-        const food = ps.filter(p => FOOD_TYPES.has(p.type)).sort((a, b) => Number(b.must) - Number(a.must));
-        return { city, attractions, food };
-      });
-  }, [trip.places, filter]);
+      .map(([city, ps]) => ({
+        city,
+        places: ps.sort((a, b) => Number(b.must) - Number(a.must)),
+      }));
+  }, [trip.places, filter, mainTab]);
 
-  function getCityTab(city: string): CityTab {
-    return cityTabs[city] ?? 'attractions';
-  }
+  // Counts for tab badges
+  const attractionCount = trip.places.filter(p => !FOOD_TYPES.has(p.type)).length;
+  const foodCount       = trip.places.filter(p =>  FOOD_TYPES.has(p.type)).length;
 
   /* ── CRUD ───────────────────────────────────────────────────── */
   function openAdd() {
@@ -390,6 +393,18 @@ export default function PlacesTab({ trip, onChange }: Props) {
   return (
     <div className="places-tab" dir="rtl" onClick={() => setCalPickerId(null)}>
 
+      {/* ── MAIN TABS: אטרקציות / אוכל ── */}
+      <div className="exp-subtab-nav places-main-tabs">
+        <button
+          className={`exp-subtab-btn${mainTab === 'attractions' ? ' active' : ''}`}
+          onClick={() => setMainTab('attractions')}
+        >🎯 אטרקציות {attractionCount > 0 && <span className="places-tab-count">{attractionCount}</span>}</button>
+        <button
+          className={`exp-subtab-btn${mainTab === 'food' ? ' active' : ''}`}
+          onClick={() => setMainTab('food')}
+        >🍽️ אוכל {foodCount > 0 && <span className="places-tab-count">{foodCount}</span>}</button>
+      </div>
+
       {/* ── TOOLBAR ── */}
       <div className="tab-toolbar">
         <div className="toolbar-right">
@@ -410,47 +425,21 @@ export default function PlacesTab({ trip, onChange }: Props) {
       {/* ── CITY GROUPS ── */}
       {cityGroups.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">💡</div>
-          <p>אין רעיונות עדיין. הוסיפי את הראשון!</p>
+          <div className="empty-icon">{mainTab === 'food' ? '🍽️' : '🎯'}</div>
+          <p>{mainTab === 'food' ? 'אין מסעדות / קפות עדיין' : 'אין אטרקציות עדיין'}. הוסיפי את הראשון!</p>
         </div>
       ) : (
-        cityGroups.map(({ city, attractions, food }) => {
-          const tab = getCityTab(city);
-          const display = tab === 'food' ? food : attractions;
-          const hasFood = food.length > 0;
-          const hasAttractions = attractions.length > 0;
-
+        cityGroups.map(({ city, places: cityPlaces }) => {
           return (
             <section key={city} className="city-group">
-              {/* City header + tabs */}
+              {/* City header */}
               <div className="city-group-header">
                 <h2 className="city-title">{city}</h2>
-                <div className="city-tab-bar">
-                  {hasAttractions && (
-                    <button
-                      className={`city-tab-btn ${tab === 'attractions' ? 'active' : ''}`}
-                      onClick={() => setCityTabs(prev => ({ ...prev, [city]: 'attractions' }))}
-                    >
-                      🎯 אטרקציות<span className="city-tab-count">{attractions.length}</span>
-                    </button>
-                  )}
-                  {hasFood && (
-                    <button
-                      className={`city-tab-btn ${tab === 'food' ? 'active' : ''}`}
-                      onClick={() => setCityTabs(prev => ({ ...prev, [city]: 'food' }))}
-                    >
-                      🍽️ אוכל<span className="city-tab-count">{food.length}</span>
-                    </button>
-                  )}
-                </div>
               </div>
 
               {/* Cards grid */}
-              {display.length === 0 ? (
-                <p className="city-empty">אין פריטים בקטגוריה זו</p>
-              ) : (
-                <div className="idea-cards">
-                  {display.map(place => {
+              <div className="idea-cards">
+                {cityPlaces.map(place => {
                     const img = imageCache[place.id];
                     const isRefreshing = refreshingId === place.id;
                     const calOpen = calPickerId === place.id;
@@ -577,7 +566,6 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     );
                   })}
                 </div>
-              )}
             </section>
           );
         })
