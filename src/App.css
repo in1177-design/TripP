@@ -1644,34 +1644,46 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 .itin-cal-day {
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 2px;
-  min-height: 54px; padding: 6px 2px;
-  background: var(--surface); border: 1.5px solid rgba(23,32,28,.16);
-  border-radius: 8px; cursor: pointer; transition: all .15s;
-  font-family: inherit; position: relative;
-  outline: none;   /* no browser focus ring */
+  justify-content: space-between;
+  min-height: 72px; padding: 8px 3px 6px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s;
+  font-family: inherit; position: relative; outline: none;
 }
 .itin-cal-day:focus { outline: none; }
-.itin-cal-day:hover { border-color: rgba(23,32,28,.55); }
+.itin-cal-day:hover {
+  border-color: var(--forest);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
 .itin-cal-day.active {
   background: var(--yellow); border-color: var(--yellow); color: var(--ink);
+  box-shadow: 0 3px 12px rgba(0,0,0,.13);
 }
+.itin-cal-day.has-stay { border-color: #7cc8d8; }
+.itin-cal-day.has-stay.active { border-color: var(--yellow); }
 
-.icd-num { font-size: 16px; font-weight: 800; line-height: 1; }
-.icd-city {
+.icd-month {
   font-size: 9px; font-weight: 700; color: var(--ink-muted);
-  text-align: center; max-width: 100%; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; padding: 0 2px;
+  letter-spacing: .04em; line-height: 1;
 }
-.itin-cal-day.active .icd-city { color: rgba(23,32,28,.65); }
+.itin-cal-day.active .icd-month { color: rgba(23,32,28,.5); }
+
+.icd-num { font-size: 19px; font-weight: 800; line-height: 1; }
+
+.icd-foot {
+  display: flex; align-items: center; justify-content: center;
+  height: 12px;
+}
+.icd-hotel { font-size: 11px; line-height: 1; }
 
 .icd-dot {
   width: 5px; height: 5px; border-radius: 50%;
-  background: var(--forest); margin-top: 1px;
+  background: var(--forest);
 }
+.icd-dot--empty { background: transparent; }
 .itin-cal-day.active .icd-dot { background: var(--ink); }
 
-.itin-cal-empty { min-height: 54px; border-radius: 8px; }
+.itin-cal-empty { min-height: 72px; border-radius: 12px; }
 
 /* ---- DAY CARD ---- */
 .itin-day-card {

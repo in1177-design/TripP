@@ -188,12 +188,8 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
       <CalendarGrid
         dates={dates}
         activeDay={activeDay}
-        dayBases={dayBases}
-        hasItems={d =>
-          dayItems(d).length > 0 ||
-          dayFlights(d).length > 0 ||
-          dayStays(d).length > 0
-        }
+        hasItems={d => dayItems(d).length > 0 || dayFlights(d).length > 0}
+        hasStay={d => dayStays(d).length > 0}
         onSelect={setActiveDay}
       />
 
@@ -360,26 +356,18 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 
 // ---- Calendar grid ----
 function CalendarGrid({
-  dates, activeDay, dayBases, hasItems, onSelect,
+  dates, activeDay, hasItems, hasStay, onSelect,
 }: {
   dates: string[];
   activeDay: string;
-  dayBases: Record<string, string>;
   hasItems: (date: string) => boolean;
+  hasStay: (date: string) => boolean;
   onSelect: (date: string) => void;
 }) {
   if (dates.length === 0) return null;
 
-  // getDay() → 0=ראשון (Sun) … 6=שבת (Sat) — matches Israeli week
   const startDow = new Date(dates[0] + 'T12:00:00').getDay();
-
-  // Flat list: nulls for padding, then trip dates
-  const cells: (string | null)[] = [
-    ...Array(startDow).fill(null),
-    ...dates,
-  ];
-
-  // Chunk into weeks of 7, pad last week
+  const cells: (string | null)[] = [...Array(startDow).fill(null), ...dates];
   const weeks: (string | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) {
     const w = cells.slice(i, i + 7);
@@ -389,31 +377,35 @@ function CalendarGrid({
 
   return (
     <div className="itin-calendar">
-      {/* Day-of-week header */}
       <div className="itin-cal-header">
         {WEEK_HE.map(d => <div key={d} className="itin-cal-dh">{d}</div>)}
       </div>
-
-      {/* Week rows */}
       {weeks.map((week, wi) => (
         <div key={wi} className="itin-cal-week">
-          {week.map((date, di) =>
-            date ? (
+          {week.map((date, di) => {
+            if (!date) return <div key={di} className="itin-cal-empty" />;
+            const d = new Date(date + 'T12:00:00');
+            const stay = hasStay(date);
+            const items = hasItems(date);
+            return (
               <button
                 key={di}
-                className={`itin-cal-day${activeDay === date ? ' active' : ''}`}
+                className={`itin-cal-day${activeDay === date ? ' active' : ''}${stay ? ' has-stay' : ''}`}
                 onClick={() => onSelect(date)}
               >
-                <span className="icd-num">{new Date(date + 'T12:00:00').getDate()}</span>
-                {dayBases[date] && (
-                  <span className="icd-city">{dayBases[date]}</span>
-                )}
-                {hasItems(date) && <span className="icd-dot" />}
+                <span className="icd-month">{MONTH_HE[d.getMonth()]}'</span>
+                <span className="icd-num">{d.getDate()}</span>
+                <span className="icd-foot">
+                  {stay
+                    ? <span className="icd-hotel" title="לינה">🏨</span>
+                    : items
+                      ? <span className="icd-dot" />
+                      : <span className="icd-dot icd-dot--empty" />
+                  }
+                </span>
               </button>
-            ) : (
-              <div key={di} className="itin-cal-empty" />
-            )
-          )}
+            );
+          })}
         </div>
       ))}
     </div>
