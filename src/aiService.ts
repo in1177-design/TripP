@@ -36,20 +36,20 @@ export async function enrichPlace(
 
 חשוב: המקום חייב להיות ממוקם ב${tripDestination} או באזורה. אם קיימים מקומות בשם זהה במדינות אחרות, התייחס רק לזה שנמצא ביעד הטיול.
 
-החזר JSON בלבד (ללא טקסט נוסף) עם הפרטים הבאים:
+ענה על מה שאתה יודע. החזר JSON בלבד (ללא טקסט נוסף). אם אינך בטוח בשדה מסוים — החזר את הניחוש הטוב ביותר שלך. אם אין לך שום מידע על שדה — החזר null.
 {
-  "nameEn": "שם באנגלית",
+  "nameEn": "שם באנגלית (כולל שם רשמי אם שונה ממה שהוזן)",
   "nameHe": "שם בעברית",
   "city": "שם העיר בעברית בלבד (חייב להיות עיר ב${tripDestination})",
-  "area": "שכונה או אזור",
-  "address": "כתובת רחוב מלאה או null",
+  "area": "שכונה או אזור או null",
+  "address": "כתובת רחוב מלאה ככל שידוע לך, למשל 'ul. Energylandia 1, Zator' — או null רק אם באמת אינך יודע כלום",
   "type": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר",
-  "priceChild": מחיר ילד בשקלים או null,
-  "priceAdult": מחיר מבוגר בשקלים או null,
+  "priceChild": מחיר ילד במטבע מקומי (מספר בלבד) או null,
+  "priceAdult": מחיר מבוגר במטבע מקומי (מספר בלבד) או null,
   "rating": דירוג מ-1 עד 5 או null,
-  "travelTime": "זמן נסיעה ממרכז העיר למשל 10 דק'",
+  "travelTime": "זמן נסיעה ממרכז העיר, למשל '10 דק'' — או null",
   "description": "תיאור קצר של המקום בעברית, משפט אחד",
-  "website": "כתובת אתר רשמי או null"
+  "website": "כתובת אתר רשמי ידועה (הניחוש הטוב ביותר שלך אפילו אם אינך בטוח 100%) — או null רק אם אין לך שום מושג"
 }`;
 
   // Use direct Anthropic API (works in both dev and production)
@@ -68,8 +68,8 @@ export async function enrichPlace(
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 600,
         messages: [{ role: 'user', content: prompt }],
       }),
     });

@@ -328,13 +328,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
         fetchOGImage(website).then(ogImg => {
           if (ogImg) setImgResults(prev => [ogImg, ...prev.filter(u => u !== ogImg)]);
         });
-        // Also re-search Wikipedia with English name if now available
-        const enName = result.nameEn || form.nameEn;
-        if (enName && enName !== searchName) {
-          searchImages(enName).then(imgs => {
-            setImgResults(prev => [...new Set([...prev, ...imgs])]);
-          });
-        }
+      }
+      // Always re-search Wikipedia with AI's English name (it may differ from what was typed, e.g. Zatorland → Energylandia)
+      const enName = result.nameEn || form.nameEn;
+      if (enName && enName !== searchName) {
+        searchImages(`${enName} ${trip.destination}`, website || undefined).then(imgs => {
+          setImgResults(prev => [...new Set([...prev, ...imgs])]);
+        });
       }
     } catch (err) {
       const msg = err instanceof Error && err.name === 'AbortError'
