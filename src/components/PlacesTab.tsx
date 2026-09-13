@@ -102,11 +102,27 @@ async function fetchWikiImage(searchTerm: string): Promise<string | null> {
   return await openSearch('pl', term);
 }
 
-/* ── Image search: fetch multiple Wikipedia thumbnails ─────────── */
-async function searchImages(rawTerm: string): Promise<string[]> {
+/* ── Fetch OG image from a website via microlink.io ────────────── */
+async function fetchOGImage(websiteUrl: string): Promise<string | null> {
+  if (!websiteUrl) return null;
+  try {
+    const url = `https://api.microlink.io/?url=${encodeURIComponent(websiteUrl)}&meta=false`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.data?.image?.url ?? data?.data?.logo?.url ?? null;
+  } catch { return null; }
+}
+
+/* ── Image search: Wikipedia thumbnails + optional website OG ───── */
+async function searchImages(rawTerm: string, websiteUrl?: string): Promise<string[]> {
   const clean = rawTerm.replace(/[&/].*/g, '').replace(/['''`]/g, '').trim();
-  if (!clean) return [];
+  if (!clean && !websiteUrl) return [];
   const results: string[] = [];
+
+  function addUniq(url: string | null) {
+    if (url && !results.includes(url)) results.push(url);
+  }
 
   async function getThumb(lang: string, title: string): Promise<string | null> {
     const encoded = encodeURIComponent(title.replace(/ /g, '_'));
@@ -122,16 +138,26 @@ async function searchImages(rawTerm: string): Promise<string[]> {
   }
 
   async function addFromLang(lang: string, limit: number) {
+    if (!clean) return;
     try {
       const url = `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(clean)}&limit=${limit}&format=json&origin=*`;
       const res = await fetch(url);
       const [, titles] = await res.json() as [string, string[]];
       const imgs = await Promise.all((titles ?? []).map(t => getThumb(lang, t)));
-      imgs.forEach(img => { if (img && !results.includes(img)) results.push(img); });
+      imgs.forEach(img => addUniq(img));
     } catch { /* ignore */ }
   }
 
-  await Promise.all([addFromLang('en', 5), addFromLang('pl', 3)]);
+  // Run Wikipedia + website OG fetch in parallel
+  const [, , ogImg] = await Promise.all([
+    addFromLang('en', 5),
+    addFromLang('pl', 3),
+    websiteUrl ? fetchOGImage(websiteUrl) : Promise.resolve(null),
+  ]);
+
+  // Prepend OG image (it's usually the most relevant)
+  if (ogImg && !results.includes(ogImg)) results.unshift(ogImg);
+
   return results;
 }
 
@@ -213,7 +239,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
     const term = form.nameEn || form.nameHe;
     if (!term) return;
     setImgSearching(true); setImgResults([]);
-    const imgs = await searchImages(term);
+    const imgs = await searchImages(term, form.website?.trim() || undefined);
     setImgResults(imgs); setImgSearching(false);
   }
 
@@ -243,25 +269,33 @@ export default function PlacesTab({ trip, onChange }: Props) {
       ? `${searchName}, ${form.address.trim()}`
       : searchName;
     setAiLoading(true); setAiError('');
-    // Kick off image search in parallel using the name (address confuses image search)
+    // Kick off initial image search (Wikipedia only — no website yet)
     setImgSearching(true); setImgResults([]);
-    searchImages(searchName).then(imgs => {
+    searchImages(searchName, form.website?.trim() || undefined).then(imgs => {
       setImgResults(imgs); setImgSearching(false);
     });
     try {
       // Pass full query (with address) as primary, Hebrew name as hint
       const result = await enrichPlace(searchQuery, trip.destination, form.nameHe.trim() || undefined);
-      // Fill in nameHe from AI if we searched by English and nameHe was empty
+      // Apply AI result to form
       if (!form.nameHe.trim() && result.nameHe) {
         setForm(f => ({ ...f, ...result, nameHe: result.nameHe ?? f.nameHe }));
-        // Re-search images with the now-known English name for better results
-        if (result.nameEn) {
-          searchImages(result.nameEn).then(imgs => {
-            setImgResults(prev => [...new Set([...imgs, ...prev])]);
-          });
-        }
       } else {
         setForm(f => ({ ...f, ...result }));
+      }
+      // If AI found a website, fetch its OG image and prepend to results
+      const website = result.website || form.website;
+      if (website) {
+        fetchOGImage(website).then(ogImg => {
+          if (ogImg) setImgResults(prev => [ogImg, ...prev.filter(u => u !== ogImg)]);
+        });
+        // Also re-search Wikipedia with English name if now available
+        const enName = result.nameEn || form.nameEn;
+        if (enName && enName !== searchName) {
+          searchImages(enName).then(imgs => {
+            setImgResults(prev => [...new Set([...prev, ...imgs])]);
+          });
+        }
       }
     } catch (err) {
       const msg = err instanceof Error && err.name === 'AbortError'
@@ -280,9 +314,9 @@ export default function PlacesTab({ trip, onChange }: Props) {
       const searchTerm = place.nameEn || place.nameHe;
       const [enriched, imgs] = await Promise.all([
         enrichPlace(searchTerm, trip.destination, place.nameHe).catch(() => ({})),
-        searchImages(searchTerm),
+        searchImages(searchTerm, place.website || undefined),
       ]);
-      // Best image: first from searchImages, fallback to existing
+      // Best image: first from searchImages (OG image is prepended if found), fallback to existing
       const imgUrl = imgs[0] ?? null;
       const updated: Place = {
         ...place,
