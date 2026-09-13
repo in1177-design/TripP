@@ -1,9 +1,11 @@
-# Environment / secrets — never commit
+# Environment / secrets — never commit these
 .env
 .env.*
 !.env.example
+*.local
 service-account*.json
-*-service-account.json
+*-service-account*.json
+*-sa-key*.json
 *firebase-adminsdk*.json
 *adminsdk*.json
 
@@ -19,7 +21,6 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
