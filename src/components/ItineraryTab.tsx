@@ -82,16 +82,6 @@ function emptyItem(date: string): Partial<ItineraryItem> {
 }
 
 // --------- Budget helper ---------
-function calcBudget(items: ItineraryItem[], stays: Stay[]) {
-  const map: Record<string, Record<string, number>> = {};
-  const addCost = (cur: string, cat: string, amt: number) => {
-    if (!map[cur]) map[cur] = {};
-    map[cur][cat] = (map[cur][cat] || 0) + amt;
-  };
-  items.forEach(i => i.cost && addCost(i.currency || 'ILS', i.type, i.cost));
-  stays.forEach(s => s.cost && addCost(s.currency || 'ILS', 'hotel', s.cost));
-  return map;
-}
 
 export default function ItineraryTab({ trip, onUpdate }: Props) {
   const dates = useMemo(() => {
@@ -108,7 +98,6 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
   const stays = trip.stays || [];
   const dayBases = trip.dayBases || {};
 
-  const budget = useMemo(() => calcBudget(itinerary, stays), [itinerary, stays]);
 
   function save(patch: Partial<Trip>) {
     onUpdate({ ...trip, ...patch });
@@ -187,30 +176,6 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
 
   return (
     <div className="itin-root" dir="rtl">
-      {/* ===== BUDGET ===== */}
-      {Object.keys(budget).length > 0 && (
-        <div className="itin-budget">
-          <h3 className="itin-section-title">💰 תקציב</h3>
-          <div className="itin-budget-cards">
-            {Object.entries(budget).map(([cur, cats]) => {
-              const total = Object.values(cats).reduce((a, b) => a + b, 0);
-              const sym = CURRENCY_SYMBOLS[cur] || cur;
-              return (
-                <div key={cur} className="itin-budget-card">
-                  <div className="ibc-total">{sym}{total.toLocaleString()}</div>
-                  <div className="ibc-currency">{cur}</div>
-                  {Object.entries(cats).map(([cat, amt]) => (
-                    <div key={cat} className="ibc-row">
-                      <span>{ITEM_ICONS[cat as ItemType] || '📌'} {cat}</span>
-                      <span>{sym}{amt.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ===== CALENDAR GRID ===== */}
       <CalendarGrid
