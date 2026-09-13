@@ -638,6 +638,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
               </div>
               {aiError && <div className="ai-error">{aiError}</div>}
 
+              <div className="field"><label>כתובת</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="רחוב, מספר (לקישור מפה)" /></div>
+
               <div className="field-row">
                 <div className="field"><label>עיר</label><input value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="עיר" /></div>
                 <div className="field"><label>אזור</label><input value={form.area || ''} onChange={e => setForm(f => ({ ...f, area: e.target.value }))} placeholder="אזור / שכונה" /></div>
@@ -659,7 +661,6 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
               <div className="field"><label>תיאור</label><input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="תיאור קצר..." /></div>
               <div className="field"><label>אתר</label><input value={form.website || ''} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://..." /></div>
-              <div className="field"><label>כתובת</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="רחוב, עיר (לקישור מפה)" /></div>
 
               {/* Image field + search */}
               <div className="field">
