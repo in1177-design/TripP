@@ -30,30 +30,19 @@ export async function deleteTrip(id: string): Promise<void> {
 
 /**
  * Subscribe to all trips owned by or shared with the current user.
- * Requires the user to be signed in.
+ * Falls back to a simple owner-only query if composite indexes aren't ready yet.
  */
 export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
   const uid = auth.currentUser?.uid;
   if (!uid) {
-    // Return a no-op unsubscribe; App.tsx will retry once auth is ready
     callback([]);
     return () => {};
   }
 
-  // Two separate queries merged client-side (Firestore doesn't support OR across fields)
-  const qOwned = query(
-    collection(db, TRIPS),
-    where('ownerId', '==', uid),
-    orderBy('startDate', 'desc'),
-  );
-  const qShared = query(
-    collection(db, TRIPS),
-    where('participantUids', 'array-contains', uid),
-    orderBy('startDate', 'desc'),
-  );
-
   let ownedTrips:  Trip[] = [];
   let sharedTrips: Trip[] = [];
+  let ownedReady  = false;
+  let sharedReady = false;
 
   function merge() {
     const seen = new Set<string>();
@@ -65,8 +54,50 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
     callback(all);
   }
 
-  const unsubOwned  = onSnapshot(qOwned,  snap => { ownedTrips  = snap.docs.map(d => d.data() as Trip); merge(); });
-  const unsubShared = onSnapshot(qShared, snap => { sharedTrips = snap.docs.map(d => d.data() as Trip); merge(); });
+  // Query 1: trips owned by this user
+  const qOwned = query(
+    collection(db, TRIPS),
+    where('ownerId', '==', uid),
+    orderBy('startDate', 'desc'),
+  );
+
+  const unsubOwned = onSnapshot(
+    qOwned,
+    snap => {
+      ownedTrips = snap.docs.map(d => d.data() as Trip);
+      ownedReady = true;
+      merge();
+    },
+    err => {
+      console.warn('subscribeTrips owned query error:', err.code, err.message);
+      // If index not ready yet, surface empty list so app doesn't hang
+      ownedReady = true;
+      if (!sharedReady) { sharedReady = true; sharedTrips = []; }
+      merge();
+    },
+  );
+
+  // Query 2: trips shared with this user
+  const qShared = query(
+    collection(db, TRIPS),
+    where('participantUids', 'array-contains', uid),
+    orderBy('startDate', 'desc'),
+  );
+
+  const unsubShared = onSnapshot(
+    qShared,
+    snap => {
+      sharedTrips = snap.docs.map(d => d.data() as Trip);
+      sharedReady = true;
+      merge();
+    },
+    err => {
+      console.warn('subscribeTrips shared query error:', err.code, err.message);
+      sharedReady = true;
+      if (!ownedReady) { ownedReady = true; ownedTrips = []; }
+      merge();
+    },
+  );
 
   return () => { unsubOwned(); unsubShared(); };
 }
