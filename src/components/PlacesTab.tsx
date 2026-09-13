@@ -336,11 +336,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
         ? { ...result, city: normalizeCity(result.city) }
         : result;
       // Smart merge: for each field pick the better value (see pickBest helper).
-      // nameHe is always the user's own entry — never overwrite it with the AI version.
+      // nameHe and city are protected — only fill in if currently empty,
+      // to avoid overwriting the user's city and splitting the city groups display.
       setForm(f => {
         const next = { ...f };
         for (const [key, aiVal] of Object.entries(normalizedResult)) {
-          if (key === 'nameHe') continue; // user's own text — never overwrite
+          if (key === 'nameHe') continue;                         // user's own text — never overwrite
+          if (key === 'city' && f.city?.trim()) continue;         // keep existing city → no group split
           const existing = (f as Record<string, unknown>)[key];
           const best = pickBest(existing, aiVal);
           if (best !== existing) (next as Record<string, unknown>)[key] = best;
@@ -393,7 +395,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
         if (best !== updatedRec[key]) updatedRec[key] = best;
       }
       const updated = updatedRec as unknown as Place;
-      if (enrichedCity) updated.city = normalizeCity(enrichedCity);
+      if (enrichedCity && !place.city?.trim()) updated.city = normalizeCity(enrichedCity); // fill city only if missing
       if (imgUrl) updated.imageUrl = imgUrl;
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
       if (imgUrl) {
