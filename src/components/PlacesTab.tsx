@@ -266,7 +266,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
     const term = form.nameEn || form.nameHe;
     if (!term) return;
     setImgSearching(true); setImgResults([]);
-    const imgs = await searchImages(term, form.website?.trim() || undefined);
+    // Include destination in query to disambiguate same-name places
+    const imgs = await searchImages(`${term} ${trip.destination}`, form.website?.trim() || undefined);
     setImgResults(imgs); setImgSearching(false);
   }
 
@@ -293,14 +294,16 @@ export default function PlacesTab({ trip, onChange }: Props) {
   async function handleAIEnrich() {
     const searchName = form.nameEn?.trim() || form.nameHe.trim();
     if (!searchName) return;
-    // Build a richer query: name + address if available
+    // Build a richer query: name + address (or destination for disambiguation)
     const searchQuery = form.address?.trim()
       ? `${searchName}, ${form.address.trim()}`
-      : searchName;
+      : `${searchName} ${trip.destination}`;
+    // Image search: name + destination to avoid wrong-country results
+    const imgQuery = `${searchName} ${trip.destination}`;
     setAiLoading(true); setAiError('');
     // Kick off initial image search (Wikipedia only — no website yet)
     setImgSearching(true); setImgResults([]);
-    searchImages(searchName, form.website?.trim() || undefined).then(imgs => {
+    searchImages(imgQuery, form.website?.trim() || undefined).then(imgs => {
       setImgResults(imgs); setImgSearching(false);
     });
     try {
@@ -344,9 +347,11 @@ export default function PlacesTab({ trip, onChange }: Props) {
     setRefreshingId(place.id);
     try {
       const searchTerm = place.nameEn || place.nameHe;
+      // Include destination to disambiguate same-name places in other countries
+      const imgTerm = `${searchTerm} ${trip.destination}`;
       const [enriched, imgs] = await Promise.all([
         enrichPlace(searchTerm, trip.destination, place.nameHe).catch(() => ({})),
-        searchImages(searchTerm, place.website || undefined),
+        searchImages(imgTerm, place.website || undefined),
       ]);
       // Best image: first from searchImages (OG image is prepended if found), fallback to existing
       const imgUrl = imgs[0] ?? null;
