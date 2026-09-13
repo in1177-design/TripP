@@ -5,6 +5,7 @@ interface PlaceAIResult {
   nameHe?: string;
   city?: string;
   area?: string;
+  address?: string;
   type?: PlaceType;
   priceChild?: number;
   priceAdult?: number;
@@ -39,6 +40,7 @@ export async function enrichPlace(
   "nameHe": "שם בעברית",
   "city": "עיר",
   "area": "שכונה או אזור",
+  "address": "כתובת רחוב מלאה או null",
   "type": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר",
   "priceChild": מחיר ילד בשקלים או null,
   "priceAdult": מחיר מבוגר בשקלים או null,
@@ -88,6 +90,7 @@ export async function enrichPlace(
     nameHe: json.nameHe || undefined,
     city: json.city || undefined,
     area: json.area || undefined,
+    address: json.address || undefined,
     type: VALID_TYPES.includes(json.type) ? json.type : undefined,
     priceChild: json.priceChild ?? undefined,
     priceAdult: json.priceAdult ?? undefined,
