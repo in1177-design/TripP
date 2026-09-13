@@ -148,6 +148,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [imgSearching,  setImgSearching]  = useState(false);
   const [refreshingId,  setRefreshingId]  = useState<string | null>(null);
   const [calPickerId,   setCalPickerId]   = useState<string | null>(null);  // date-picker open for this place
+  const [viewPlace,     setViewPlace]     = useState<Place | null>(null);   // read-only detail view
 
   // Wikipedia image cache (session-only)
   const [imageCache, setImageCache] = useState<Record<string, string>>({});
@@ -381,7 +382,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       <div
                         key={place.id}
                         className={`idea-card ${place.must ? 'idea-card--must' : ''}`}
-                        onClick={e => e.stopPropagation()}
+                        onClick={() => setViewPlace(place)}
+                        style={{ cursor: 'pointer' }}
                       >
                         {/* Image */}
                         <div
@@ -393,7 +395,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                             <span className="idea-card-chip">{TYPE_ICONS[place.type]} {place.type}</span>
                             {place.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
                           </div>
-                          <button type="button" className="idea-card-del" onClick={() => remove(place.id)} title="מחק">✕</button>
+                          <button type="button" className="idea-card-del" onClick={e => { e.stopPropagation(); remove(place.id); }} title="מחק">✕</button>
                         </div>
 
                         {/* Body */}
@@ -437,7 +439,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                               <button
                                 type="button"
                                 className={`idea-card-btn ${place.must ? 'on' : ''}`}
-                                onClick={() => toggleMust(place.id)}
+                                onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
                                 title="Must"
                               >{place.must ? '⭐' : '☆'}</button>
 
@@ -445,13 +447,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
                               <button
                                 type="button"
                                 className="idea-card-btn idea-card-btn--refresh"
-                                onClick={() => handleRefresh(place)}
+                                onClick={e => { e.stopPropagation(); handleRefresh(place); }}
                                 disabled={isRefreshing}
                                 title="רענן פרטים"
                               >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
 
                               {/* Add to calendar 📅 — with date picker */}
-                              <div className="cal-btn-wrap">
+                              <div className="cal-btn-wrap" onClick={e => e.stopPropagation()}>
                                 <button
                                   type="button"
                                   className={`idea-card-btn idea-card-btn--cal ${calOpen ? 'on' : ''}`}
@@ -487,7 +489,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                               <button
                                 type="button"
                                 className="idea-card-btn idea-card-edit"
-                                onClick={() => openEdit(place)}
+                                onClick={e => { e.stopPropagation(); openEdit(place); }}
                                 title="ערוך"
                               >✏️</button>
 
@@ -503,6 +505,98 @@ export default function PlacesTab({ trip, onChange }: Props) {
           );
         })
       )}
+
+      {/* ── VIEW MODAL (read-only) ── */}
+      {viewPlace && (() => {
+        const vp = viewPlace;
+        const vpImg = imageCache[vp.id] || vp.imageUrl;
+        return (
+          <div className="place-modal-overlay" onClick={() => setViewPlace(null)}>
+            <div className="place-modal place-view-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+              {/* Header image */}
+              {vpImg && (
+                <div className="place-view-hero" style={{ backgroundImage: `url(${vpImg})` }}>
+                  <div className="place-view-hero-overlay" />
+                  <div className="place-view-hero-chips">
+                    <span className="idea-card-chip">{TYPE_ICONS[vp.type]} {vp.type}</span>
+                    {vp.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
+                  </div>
+                </div>
+              )}
+
+              <div className="place-modal-hdr">
+                <div>
+                  <h3 style={{ margin: 0 }}>{vp.nameHe}</h3>
+                  {vp.nameEn && <div style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 2 }}>{vp.nameEn}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="place-modal-close" onClick={() => { setViewPlace(null); openEdit(vp); }} title="עריכה">✏️</button>
+                  <button type="button" className="place-modal-close" onClick={() => setViewPlace(null)} title="סגור">✕</button>
+                </div>
+              </div>
+
+              <div className="place-modal-body place-view-body">
+                {/* Meta chips */}
+                <div className="place-view-chips">
+                  {vp.city && <span className="place-view-chip">📍 {vp.city}{vp.area ? ` · ${vp.area}` : ''}</span>}
+                  {vp.duration != null && vp.duration > 0 && <span className="place-view-chip">🕒 {vp.duration}ש' ביקור</span>}
+                  {vp.travelTime && <span className="place-view-chip">🚗 {vp.travelTime} מהמרכז</span>}
+                  {vp.rating != null && <span className="place-view-chip">⭐ {vp.rating} / 5</span>}
+                  {(vp.priceAdult != null || vp.priceChild != null) && (
+                    <span className="place-view-chip">
+                      💶{vp.priceAdult != null ? ` מבוגר ₪${vp.priceAdult}` : ''}
+                      {vp.priceAdult != null && vp.priceChild != null ? ' · ' : ''}
+                      {vp.priceChild != null ? `ילד ₪${vp.priceChild}` : ''}
+                    </span>
+                  )}
+                </div>
+
+                {/* Description */}
+                {vp.description && <p className="place-view-desc">{vp.description}</p>}
+
+                {/* Website */}
+                {vp.website && (
+                  <a href={vp.website} target="_blank" rel="noreferrer" className="place-view-link">
+                    🔗 {vp.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                  </a>
+                )}
+
+                {/* Actions */}
+                <div className="place-view-actions">
+                  <button
+                    type="button"
+                    className={`btn-secondary ${vp.must ? 'btn-must-on' : ''}`}
+                    onClick={() => { toggleMust(vp.id); setViewPlace(p => p ? { ...p, must: !p.must } : null); }}
+                  >{vp.must ? '⭐ Must — הסר' : '☆ הוסף ל-Must'}</button>
+
+                  {tripDates.length > 0 && (
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setCalPickerId(calPickerId === vp.id ? null : vp.id)}
+                      >📅 הוסף לתכנית</button>
+                      {calPickerId === vp.id && (
+                        <div className="cal-date-picker cal-date-picker--up" onClick={e => e.stopPropagation()}>
+                          <div className="cal-date-picker-title">בחרי תאריך</div>
+                          <div className="cal-date-list">
+                            {tripDates.map(date => (
+                              <button key={date} type="button" className="cal-date-btn"
+                                onClick={() => { handleAddToCalendar(vp, date); setViewPlace(null); }}>
+                                {fmtDateLabel(date)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── ADD / EDIT MODAL ── */}
       {modalOpen && (
