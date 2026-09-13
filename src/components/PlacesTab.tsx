@@ -240,7 +240,10 @@ export default function PlacesTab({ trip, onChange }: Props) {
         return;
       }
       const term = place.nameEn || place.nameHe;
-      const url = await fetchWikiImage(term);
+      // Try Wikipedia first; for food places (restaurants/cafés) Wikipedia rarely has articles,
+      // so fall back to the website's OG image if available.
+      let url = await fetchWikiImage(term);
+      if (!url && place.website) url = await fetchOGImage(place.website);
       if (url) setImageCache(c => ({ ...c, [place.id]: url }));
     });
   }, [trip.places]);
@@ -524,9 +527,10 @@ export default function PlacesTab({ trip, onChange }: Props) {
                                 {place.priceChild != null ? `ילד ₪${place.priceChild}` : ''}
                               </span>
                             )}
-                            {place.website && (
-                              <a href={place.website} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🔗 אתר</a>
-                            )}
+                            {place.website
+                              ? <a href={place.website} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🔗 אתר</a>
+                              : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((place.nameEn || place.nameHe) + (place.city ? ' ' + place.city : ''))}`} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🍴 TripAdvisor</a>
+                            }
                           </div>
 
                           {/* Footer */}
@@ -665,12 +669,15 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   );
                 })()}
 
-                {/* Website */}
-                {vp.website && (
-                  <a href={vp.website} target="_blank" rel="noreferrer" className="place-view-link">
-                    🔗 {vp.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                  </a>
-                )}
+                {/* Website or TripAdvisor fallback */}
+                {vp.website
+                  ? <a href={vp.website} target="_blank" rel="noreferrer" className="place-view-link">
+                      🔗 {vp.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </a>
+                  : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((vp.nameEn || vp.nameHe) + (vp.city ? ' ' + vp.city : ''))}`} target="_blank" rel="noreferrer" className="place-view-link">
+                      🍴 חפש ב-TripAdvisor
+                    </a>
+                }
 
                 {/* Actions */}
                 <div className="place-view-actions">
