@@ -126,12 +126,43 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
 
   // ── Exchange Rates ─────────────────────────────────────────────────────────
 
+  const [fetchingRates, setFetchingRates] = useState(false);
+  const [ratesError,    setRatesError]    = useState('');
+
   function saveRateInForm(cur: string, val: string) {
     const num = parseFloat(val);
     set('exchangeRates', {
       ...(form.exchangeRates || {}),
       [cur]: isNaN(num) ? 0 : num,
     });
+  }
+
+  async function fetchLiveRates() {
+    setFetchingRates(true);
+    setRatesError('');
+    try {
+      // fawazahmed0 currency API via jsDelivr CDN — free, no key, CORS-friendly.
+      // Returns: { "ils": { "eur": 0.244, "usd": 0.272, ... } }
+      const res = await fetch(
+        'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/ils.json'
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { ils: Record<string, number> };
+      const TARGET = ['eur', 'usd', 'pln', 'gbp'];
+      const updated: Record<string, number> = { ...(form.exchangeRates || {}) };
+      for (const cur of TARGET) {
+        const rate = data.ils[cur];
+        if (rate && rate > 0) {
+          const key = cur.toUpperCase();
+          updated[key] = Math.round((1 / rate) * 100) / 100;
+        }
+      }
+      set('exchangeRates', updated);
+    } catch {
+      setRatesError('לא ניתן לטעון שערים — בדוק חיבור לאינטרנט');
+    } finally {
+      setFetchingRates(false);
+    }
   }
 
   // All rate currencies: standard list + any extra already stored
@@ -379,8 +410,19 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
 
       {/* ══ 5. שערי חליפין ══ */}
       <section className="settings-section">
-        <h3 className="settings-section-title">שערי חליפין → ₪</h3>
+        <div className="settings-section-head">
+          <h3 className="settings-section-title">שערי חליפין → ₪</h3>
+          <button
+            className="btn-outline-sm"
+            onClick={fetchLiveRates}
+            disabled={fetchingRates}
+            title="עדכן שערים חיים מהאינטרנט"
+          >
+            {fetchingRates ? '⏳ טוען...' : '🔄 עדכן שערים'}
+          </button>
+        </div>
         <p className="settings-hint">כמה שקלים שווה 1 יחידה של כל מטבע — משמש לסיכום ההוצאות</p>
+        {ratesError && <p className="settings-hint" style={{ color: 'var(--danger)' }}>{ratesError}</p>}
         <div className="settings-rates-list">
           {allRateCurrencies.map(cur => (
             <div key={cur} className="settings-rate-row">
