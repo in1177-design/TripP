@@ -1618,9 +1618,9 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .trv-card { padding: 14px 10px 12px; }
   .trv-avatar { width: 48px; height: 48px; font-size: 1.1rem; }
 
-  /* ── Dashboard — single column, full width ── */
-  .dash-new { grid-template-columns: 1fr; padding: 12px 0 24px; gap: 10px; }
-  .dash-left, .dash-right { width: 100%; }
+  /* ── Dashboard — single column, RTL-safe flex stack ── */
+  .dash-new { display: flex; flex-direction: column; padding: 12px 0 24px; gap: 10px; }
+  .dash-left, .dash-right { width: 100%; min-width: 0; }
   .dhc { min-height: 180px; }
   .dhc-date { font-size: 32px; }
 
