@@ -1,191 +1,230 @@
-import type { Trip, ItineraryItem, Stay } from '../types';
+import { useState } from 'react';
+import type { Trip, ItineraryItem } from '../types';
 
 interface Props {
   trip: Trip;
   onNavigate: (tab: string) => void;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  ILS: '₪', USD: '$', EUR: '€', PLN: 'zł', GBP: '£',
-};
+const MONTH_HE      = ['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
+const MONTH_HE_FULL = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const CURRENCY_SYMBOLS: Record<string, string> = { ILS:'₪', USD:'$', EUR:'€', PLN:'zł', GBP:'£' };
 
-const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
-
-function fmtDate(date: string) {
-  const d = new Date(date + 'T12:00:00');
-  return `${d.getDate()} ${MONTH_HE[d.getMonth()]}`;
+function getDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const pad = (n: number) => String(n).padStart(2,'0');
+  const toKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const d = new Date(start+'T12:00:00');
+  const e = new Date(end  +'T12:00:00');
+  while (d <= e) { dates.push(toKey(d)); d.setDate(d.getDate()+1); }
+  return dates;
 }
 
-function calcDaysUntil(startDate: string): number | null {
-  if (!startDate) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(startDate + 'T00:00:00');
-  return Math.ceil((start.getTime() - today.getTime()) / 86400000);
-}
-
-function calcBudgetTotals(itinerary: ItineraryItem[], stays: Stay[]) {
-  const totals: Record<string, number> = {};
-  const add = (cur: string, amt: number) => {
-    totals[cur] = (totals[cur] || 0) + amt;
-  };
-  itinerary.forEach(i => i.cost && add(i.currency || 'ILS', i.cost));
-  stays.forEach(s => s.cost && add(s.currency || 'ILS', s.cost));
-  return totals;
+function toILS(amount: number, currency: string, rates: Record<string,number>): number {
+  if (currency === 'ILS') return amount;
+  return amount * (rates[currency] || 1);
 }
 
 export default function DashboardTab({ trip, onNavigate }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
-  const flights = trip.flights || [];
-  const stays = trip.stays || [];
+  const todayStr  = new Date().toISOString().slice(0,10);
+  const todayDate = new Date();
+  const hour      = todayDate.getHours();
+
   const itinerary = trip.itinerary || [];
-  const places = trip.places || [];
+  const stays     = trip.stays     || [];
+  const expenses  = trip.expenses  || [];
+  const flights   = trip.flights   || [];
+  const rates     = trip.exchangeRates || {};
 
-  const daysUntil = calcDaysUntil(trip.startDate);
-  const budgetTotals = calcBudgetTotals(itinerary, stays);
-  const mustSees = places.filter(p => p.must).slice(0, 6);
+  // ── Trip phase ──────────────────────────────────────────
+  const startDate  = new Date(trip.startDate + 'T12:00:00');
+  const endDate    = new Date(trip.endDate   + 'T12:00:00');
+  const daysUntil  = Math.ceil((startDate.getTime() - todayDate.getTime()) / 86400000);
+  const isDuring   = daysUntil <= 0 && todayDate <= endDate;
+  const totalDays  = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+  const dayNum     = isDuring ? Math.floor((todayDate.getTime() - startDate.getTime()) / 86400000) + 1 : null;
 
-  // Next upcoming itinerary item (after today)
-  const nextItem = [...itinerary]
-    .filter(i => i.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  // ── City + greeting ──────────────────────────────────────
+  // Use dayBase if set, otherwise extract city from destination (strip year & country prefix)
+  const rawCity = trip.dayBases?.[todayStr] || '';
+  const fallbackCity = (() => {
+    const dest = trip.destination || '';
+    // "פולין — קרקוב וזקופנה 2026" → "קרקוב"
+    const afterDash = dest.includes('—') ? dest.split('—').pop()!.trim() : dest;
+    return afterDash.replace(/\b\d{4}\b/g, '').trim().split(' ')[0];
+  })();
+  const currentCity = rawCity || fallbackCity;
+  const greetingWord = hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב';
+
+  // ── Today's first activity (for subtitle) ────────────────
+  const todayItems = itinerary
+    .filter(i => i.date === todayStr && i.type !== 'hotel')
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+  const heroSub = todayItems[0]?.notes || todayItems[0]?.name || '';
+
+  // ── Budget ───────────────────────────────────────────────
+  const totalSpent   = expenses.reduce((s,e) => s + toILS(e.amount, e.currency, rates), 0);
+  const totalPlanned = [
+    ...itinerary.filter(i => i.cost).map(i => toILS(i.cost!, i.currency||'ILS', rates)),
+    ...stays.filter(s => s.cost).map(s => toILS(s.cost!, s.currency||'ILS', rates)),
+  ].reduce((a,b) => a+b, 0);
+  const budgetPct = totalPlanned > 0 ? Math.min(100, (totalSpent/totalPlanned)*100) : 0;
+
+  // ── Checklist ────────────────────────────────────────────
+  const checkItems = [
+    { label: 'לשמור את אישורי ההזמנה', done: flights.length > 0 },
+    { label: 'לוודא שביטוח הנסיעות בתוקף', done: false },
+    { label: 'לבדוק את מועד הצ\'ק-אין לחזור', done: stays.length > 0 },
+  ];
+  const doneCnt = checkItems.filter(c => c.done).length;
+
+  // ── Calendar / timeline ───────────────────────────────────
+  const dates = (trip.startDate && trip.endDate) ? getDates(trip.startDate, trip.endDate) : [];
+  const defaultDay = dates.includes(todayStr) ? todayStr : (dates[0] || todayStr);
+  const [activeDay, setActiveDay] = useState(defaultDay);
+
+  const activeD   = new Date(activeDay + 'T12:00:00');
+  const monthLabel = MONTH_HE_FULL[activeD.getMonth()];
+
+  const calItems: ItineraryItem[] = itinerary
+    .filter(i => i.date === activeDay)
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+  // ── Date display ─────────────────────────────────────────
+  const dd = String(todayDate.getDate()).padStart(2,'0');
+  const mm = String(todayDate.getMonth()+1).padStart(2,'0');
 
   return (
-    <div className="dash-root" dir="rtl">
-      <div className="dash-grid">
+    <div className="dash-new" dir="rtl">
 
-        {/* COUNTDOWN */}
-        {daysUntil !== null && (
-          <section className={`dash-card dash-card--countdown ${daysUntil <= 0 ? 'dash-card--countdown-now' : ''}`}>
-            {daysUntil > 0 ? (
-              <>
-                <span className="dash-count-num">{daysUntil}</span>
-                <span className="dash-count-label">ימים לטיול 🛫</span>
-              </>
-            ) : daysUntil === 0 ? (
-              <span className="dash-count-label">✈️ הטיול מתחיל היום!</span>
-            ) : (
-              <span className="dash-count-label">🏖️ בטיול עכשיו!</span>
-            )}
-          </section>
-        )}
+      {/* ═══ LEFT COLUMN ═══ */}
+      <div className="dash-left">
 
-        {/* FLIGHTS */}
-        <section className="dash-card">
-          <div className="dash-card-head">
-            <span className="dash-card-icon">✈️</span>
-            <h3>טיסות</h3>
-            <button className="dash-card-link" onClick={() => onNavigate('settings')}>ערוך</button>
+        {/* Hero card */}
+        <div
+          className="dhc"
+          style={trip.coverImage ? { backgroundImage: `url(${trip.coverImage})` } : {}}
+        >
+          <div className="dhc-overlay">
+            <div className="dhc-top">
+              <span className="dhc-label">היום בטיול</span>
+              <span className="dhc-daycount">
+                {isDuring && dayNum ? `יום ${dayNum} מתוך ${totalDays}` :
+                 daysUntil > 0    ? `עוד ${daysUntil} ימים` :
+                 'הטיול הסתיים'}
+              </span>
+            </div>
+            <div className="dhc-mid">
+              <span className="dhc-date">{dd}.{mm}</span>
+            </div>
+            <div className="dhc-body">
+              <h2 className="dhc-greeting">{greetingWord}{currentCity ? `, ${currentCity}` : ''}.</h2>
+              {heroSub && <p className="dhc-sub">{heroSub}</p>}
+            </div>
           </div>
-          {flights.length === 0 ? (
-            <div className="dash-empty-small">
-              <p>אין טיסות</p>
-              <button className="btn-outline-sm" onClick={() => onNavigate('settings')}>+ הוסף טיסה</button>
-            </div>
-          ) : (
-            <div className="dash-flights-list">
-              {flights.map(f => (
-                <div key={f.id} className="dash-flight-row">
-                  <span className="dfr-dir">{f.dir === 'out' ? '→' : '←'}</span>
-                  <span className="dfr-route">{f.from} → {f.to}</span>
-                  <span className="dfr-no">{f.flightNo}</span>
-                  <span className="dfr-info">{fmtDate(f.date)} · {f.dep}–{f.arr}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
 
-        {/* STAYS */}
-        <section className="dash-card">
-          <div className="dash-card-head">
-            <span className="dash-card-icon">🏨</span>
-            <h3>לינות</h3>
-            <button className="dash-card-link" onClick={() => onNavigate('settings')}>ערוך</button>
+        {/* Budget card */}
+        <div className="dash-dark-card">
+          <div className="ddc-badge-row">
+            <span className="ddc-badge">₪ · תקציב</span>
+            <h3 className="ddc-title">התקציב שלנו</h3>
           </div>
-          {stays.length === 0 ? (
-            <div className="dash-empty-small">
-              <p>אין לינות</p>
-              <button className="btn-outline-sm" onClick={() => onNavigate('settings')}>+ הוסף לינה</button>
-            </div>
+          {totalPlanned > 0 ? (
+            <>
+              <div className="dbc-nums">
+                <span className="dbc-spent">{Math.round(totalSpent).toLocaleString()}</span>
+                <span className="dbc-slash"> / </span>
+                <span className="dbc-planned">{Math.round(totalPlanned).toLocaleString()}</span>
+              </div>
+              <div className="dbc-bar-wrap">
+                <div className="dbc-bar" style={{ width: `${budgetPct}%` }} />
+              </div>
+              <div className="dbc-footer">
+                <span>{Math.round(budgetPct)}% מהתקציב נוצל</span>
+                <span>נותרו ₪{Math.round(Math.max(0,totalPlanned-totalSpent)).toLocaleString()}</span>
+              </div>
+            </>
           ) : (
-            <div className="dash-stays-list">
-              {stays.map(s => (
-                <div key={s.id} className="dash-stay-row">
-                  <div className="dsr-name">{s.name}</div>
-                  <div className="dsr-dates">
-                    {fmtDate(s.checkIn)} → {fmtDate(s.checkOut)}
-                    {s.cost ? <span className="dsr-cost">{CURRENCY_SYMBOLS[s.currency || 'ILS'] || s.currency}{s.cost.toLocaleString()}</span> : null}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="ddc-empty">אין תקציב מתוכנן עדיין</p>
           )}
-        </section>
+          <button className="ddc-link" onClick={() => onNavigate('budget')}>לתקציב המלא →</button>
+        </div>
 
-        {/* BUDGET */}
-        <section className="dash-card">
-          <div className="dash-card-head">
-            <span className="dash-card-icon">💰</span>
-            <h3>תקציב משוער</h3>
-            <button className="dash-card-link" onClick={() => onNavigate('budget')}>פירוט</button>
+        {/* Checklist card */}
+        <div className="dash-dark-card">
+          <div className="ddc-badge-row">
+            <span className="ddc-badge">{doneCnt} מתוך {checkItems.length}</span>
+            <h3 className="ddc-title">כדי לצאת בראש שקט</h3>
           </div>
-          {Object.keys(budgetTotals).length === 0 ? (
-            <div className="dash-empty-small"><p>אין הוצאות מתוכננות עדיין</p></div>
-          ) : (
-            <div className="dash-budget-totals">
-              {Object.entries(budgetTotals).map(([cur, total]) => (
-                <div key={cur} className="dbt-row">
-                  <span className="dbt-sym">{CURRENCY_SYMBOLS[cur] || cur}</span>
-                  <span className="dbt-amount">{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                  <span className="dbt-cur">{cur}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* NEXT UP */}
-        <section className="dash-card">
-          <div className="dash-card-head">
-            <span className="dash-card-icon">⏭️</span>
-            <h3>הבא בתור</h3>
-            <button className="dash-card-link" onClick={() => onNavigate('itinerary')}>מסלול מלא</button>
+          <div className="dcc-items">
+            {checkItems.map((item, i) => (
+              <label key={i} className={`dcc-item${item.done ? ' done' : ''}`}>
+                <span className={`dcc-box${item.done ? ' checked' : ''}`}>
+                  {item.done && '✓'}
+                </span>
+                <span className="dcc-label">{item.label}</span>
+              </label>
+            ))}
           </div>
-          {!nextItem ? (
-            <div className="dash-empty-small">
-              <p>אין פריטים קרובים</p>
-              <button className="btn-outline-sm" onClick={() => onNavigate('itinerary')}>+ הוסף לתוכנית</button>
-            </div>
-          ) : (
-            <div className="dash-next-item">
-              <div className="dni-date">{fmtDate(nextItem.date)}</div>
-              <div className="dni-name">{nextItem.name}</div>
-              {nextItem.notes && <div className="dni-notes">{nextItem.notes.slice(0, 80)}{nextItem.notes.length > 80 ? '…' : ''}</div>}
-            </div>
-          )}
-        </section>
-
-        {/* MUST-SEES */}
-        {mustSees.length > 0 && (
-          <section className="dash-card dash-card--wide">
-            <div className="dash-card-head">
-              <span className="dash-card-icon">⭐</span>
-              <h3>חייבים לראות</h3>
-              <button className="dash-card-link" onClick={() => onNavigate('places')}>כל המקומות</button>
-            </div>
-            <div className="dash-must-grid">
-              {mustSees.map(p => (
-                <div key={p.id} className="dmg-chip">
-                  <span className="dmg-name">{p.nameHe}</span>
-                  {p.city && <span className="dmg-city">{p.city}</span>}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        </div>
 
       </div>
+
+      {/* ═══ RIGHT COLUMN ═══ */}
+      <div className="dash-right">
+        <div className="dash-dark-card dash-schedule-card">
+          <div className="ddc-badge-row">
+            <span className="ddc-badge">{monthLabel}</span>
+            <h3 className="ddc-title">המסלול שלנו</h3>
+          </div>
+
+          {/* Calendar strip */}
+          {dates.length > 0 && (
+            <div className="dsc-strip">
+              {dates.map(date => {
+                const d = new Date(date+'T12:00:00');
+                return (
+                  <button
+                    key={date}
+                    className={`dsc-day${activeDay === date ? ' active' : ''}${date === todayStr ? ' today' : ''}`}
+                    onClick={() => setActiveDay(date)}
+                  >
+                    <span className="dsc-mon">{MONTH_HE[d.getMonth()]}'</span>
+                    <span className="dsc-num">{d.getDate()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Timeline */}
+          <div className="dsc-timeline">
+            {calItems.length === 0 ? (
+              <p className="ddc-empty" style={{ marginTop: 24 }}>אין פעילויות ליום זה</p>
+            ) : calItems.map(item => (
+              <div key={item.id} className="dsc-item">
+                <span className="dsc-time">{item.time || '—'}</span>
+                <span className="dsc-dot" />
+                <div className="dsc-info">
+                  <div className="dsc-name">{item.name}</div>
+                  {item.notes && <div className="dsc-notes">{item.notes}</div>}
+                  {item.cost && (
+                    <span className="dsc-chip">
+                      {CURRENCY_SYMBOLS[item.currency||'ILS']||item.currency}{item.cost.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button className="ddc-link" style={{ marginTop: 20 }} onClick={() => onNavigate('itinerary')}>
+            למסלול המלא →
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }
