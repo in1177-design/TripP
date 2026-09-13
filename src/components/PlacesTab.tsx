@@ -316,11 +316,12 @@ export default function PlacesTab({ trip, onChange }: Props) {
       const normalizedResult = result.city
         ? { ...result, city: normalizeCity(result.city) }
         : result;
-      if (!form.nameHe.trim() && normalizedResult.nameHe) {
-        setForm(f => ({ ...f, ...normalizedResult, nameHe: normalizedResult.nameHe ?? f.nameHe }));
-      } else {
-        setForm(f => ({ ...f, ...normalizedResult }));
-      }
+      // Apply AI results — only overwrite fields the AI actually returned a value for.
+      // Never blank out existing data (website, nameHe, etc.) just because the AI omitted it on a second call.
+      const toApply = Object.fromEntries(
+        Object.entries(normalizedResult).filter(([, v]) => v !== undefined && v !== null && v !== '')
+      );
+      setForm(f => ({ ...f, ...toApply }));
       // If AI found a website, fetch its OG image and prepend to results
       const website = result.website || form.website;
       if (website) {
@@ -359,9 +360,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
       // Best image: first from searchImages (OG image is prepended if found), fallback to existing
       const imgUrl = imgs[0] ?? null;
       const enrichedCity = (enriched as { city?: string }).city;
+      // Only merge fields the AI actually returned — don't clear existing data with undefined
+      const enrichedDefined = Object.fromEntries(
+        Object.entries(enriched as Record<string, unknown>).filter(([, v]) => v !== undefined && v !== null && v !== '')
+      );
       const updated: Place = {
         ...place,
-        ...enriched,
+        ...enrichedDefined,
         ...(enrichedCity ? { city: normalizeCity(enrichedCity) } : {}),
         ...(imgUrl ? { imageUrl: imgUrl } : {}),
       };
