@@ -1266,9 +1266,8 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   font-size: 10px; color: var(--ink-muted); text-align: right;
 }
 
-/* ── Redesigned form step ── */
+/* ── Redesigned form step (mobile: full-screen keyboard-aware) ── */
 .exp-sheet--form {
-  /* Full-screen, keyboard-aware: dvh shrinks when virtual keyboard opens */
   position: fixed;
   bottom: 0; left: 0; right: 0;
   height: 100vh; height: 100dvh;   /* dvh fallback: vh for old browsers */
@@ -1276,6 +1275,32 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   border-radius: 0;
   z-index: 501;                     /* above overlay (z-index: 500) */
   display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ── Desktop: expense sheets become a right-side drawer ──────────── */
+@media (min-width: 768px) {
+  /* Overlay: stretch full height, align sheet to the right (RTL: flex-start = physical right) */
+  .exp-overlay {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+  /* All sheet variants: fixed-width right drawer */
+  .exp-sheet {
+    width: 440px; max-width: 100%;
+    max-height: 100%; height: 100%;
+    border-radius: 20px 0 0 20px;    /* rounded on left (open) edge, flush on right */
+    box-shadow: -8px 0 40px rgba(0,0,0,.22);
+    overflow-y: auto;
+  }
+  /* Form step: undo the position:fixed (mobile-only), flow inside the overlay */
+  .exp-sheet--form {
+    position: relative;
+    inset: auto;
+    width: 440px; max-width: 100%;
+    height: 100%; max-height: 100%;
+    border-radius: 20px 0 0 20px;
+    z-index: auto;
+  }
 }
 .exp-form-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
