@@ -13,43 +13,48 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == tripData.ownerId;
     }
 
+    // participantUids contains ALL shared users (editors + viewers)
     function isParticipant(tripData) {
-      return isSignedIn() &&
-        tripData.participantUids is list &&
-        request.auth.uid in tripData.participantUids;
+      return isSignedIn()
+        && tripData.participantUids is list
+        && request.auth.uid in tripData.participantUids;
     }
 
-    function canRead(tripData) {
-      return isOwner(tripData) || isParticipant(tripData);
-    }
-
-    function canWrite(tripData) {
-      // Owner can always write; participants need 'editor' role
-      if (isOwner(tripData)) return true;
-      let me = tripData.participants.filter(p, p.uid == request.auth.uid);
-      return me.size() > 0 && me[0].role == 'editor';
+    // editorUids contains only users with write permission
+    // Falls back to participantUids if editorUids is not set (backwards compat)
+    function isEditor(tripData) {
+      return isSignedIn()
+        && (
+          (tripData.keys().hasAll(['editorUids'])
+            && tripData.editorUids is list
+            && request.auth.uid in tripData.editorUids)
+          ||
+          (!tripData.keys().hasAll(['editorUids'])
+            && tripData.participantUids is list
+            && request.auth.uid in tripData.participantUids)
+        );
     }
 
     // ── Trips ─────────────────────────────────────────────────────────────────
 
     match /trips/{tripId} {
-      // Read: owner or any participant
-      allow read: if canRead(resource.data);
 
-      // Create: authenticated user, must set themselves as owner
+      // Read: owner or any participant
+      allow read: if isOwner(resource.data) || isParticipant(resource.data);
+
+      // Create: signed-in user who stamps themselves as owner
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
       // Update: owner or editor; ownerId must not change
-      allow update: if canWrite(resource.data)
+      allow update: if (isOwner(resource.data) || isEditor(resource.data))
         && request.resource.data.ownerId == resource.data.ownerId;
 
       // Delete: owner only
       allow delete: if isOwner(resource.data);
     }
 
-    // ── Rate limit counters (Cloud Function only) ──────────────────────────────
-    // These are written server-side with Admin SDK — deny all client access.
+    // ── Rate limit counters — server-side Admin SDK only ───────────────────────
     match /_rateLimits/{document=**} {
       allow read, write: if false;
     }
