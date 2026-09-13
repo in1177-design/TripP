@@ -49,7 +49,7 @@ export async function enrichPlace(
   "rating": דירוג מ-1 עד 5 או null,
   "travelTime": "זמן נסיעה ממרכז העיר, למשל '10 דק'' — או null",
   "description": "תיאור קצר של המקום בעברית, משפט אחד",
-  "website": "כתובת אתר רשמי ידועה (הניחוש הטוב ביותר שלך אפילו אם אינך בטוח 100%) — או null רק אם אין לך שום מושג"
+  "website": "כתובת URL רלוונטית — אתר רשמי, דף Facebook, Instagram, TripAdvisor, Google Maps — כל מה שיש. הניחוש הטוב ביותר שלך אפילו אם אינך בטוח 100%. null רק אם אין לך שום מושג"
 }`;
 
   // Use direct Anthropic API (works in both dev and production)

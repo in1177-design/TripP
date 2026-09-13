@@ -184,6 +184,13 @@ async function searchImages(rawTerm: string, websiteUrl?: string): Promise<strin
   // Prepend OG image (it's usually the most relevant)
   if (ogImg && !results.includes(ogImg)) results.unshift(ogImg);
 
+  // If still no images, try TripAdvisor search as last resort
+  if (results.length === 0 && clean) {
+    const q = encodeURIComponent(clean);
+    const taImg = await fetchOGImage(`https://www.tripadvisor.com/Search?q=${q}`);
+    if (taImg) results.push(taImg);
+  }
+
   return results;
 }
 
@@ -240,10 +247,15 @@ export default function PlacesTab({ trip, onChange }: Props) {
         return;
       }
       const term = place.nameEn || place.nameHe;
-      // Try Wikipedia first; for food places (restaurants/cafés) Wikipedia rarely has articles,
-      // so fall back to the website's OG image if available.
+      // 1. Wikipedia
       let url = await fetchWikiImage(term);
+      // 2. Official website / Facebook / Instagram OG image
       if (!url && place.website) url = await fetchOGImage(place.website);
+      // 3. TripAdvisor search as last-resort (often returns a place photo in OG)
+      if (!url) {
+        const q = encodeURIComponent(`${term}${place.city ? ' ' + place.city : ''}`);
+        url = await fetchOGImage(`https://www.tripadvisor.com/Search?q=${q}`);
+      }
       if (url) setImageCache(c => ({ ...c, [place.id]: url }));
     });
   }, [trip.places]);
