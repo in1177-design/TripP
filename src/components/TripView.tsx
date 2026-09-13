@@ -138,7 +138,7 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
         {activeTab === 'dashboard' && <DashboardTab trip={trip} onNavigate={setTab} />}
         {activeTab === 'itinerary' && <ItineraryTab trip={trip} onUpdate={onChange} />}
         {activeTab === 'places'    && <PlacesTab    trip={trip} onChange={onChange} />}
-        {activeTab === 'budget'    && <ExpensesTab  trip={trip} onChange={onChange} />}
+        {activeTab === 'budget'    && <ExpensesTab  trip={trip} onChange={onChange} onNavigate={setTab} />}
         {activeTab === 'settings'  && <SettingsTab  trip={trip} onChange={onChange} onDelete={onDelete} />}
         {activeTab === 'journal'   && <JournalTab   trip={trip} onChange={onChange} />}
       </div>

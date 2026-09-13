@@ -11,6 +11,8 @@ interface Props {
 
 const STYLES: TripStyle[]   = ['תרבות', 'טבע', 'עיר', 'חוף', 'הרפתקאות', 'קולינריה', 'משפחה'];
 const CURRENCIES             = ['ILS', 'EUR', 'USD', 'PLN', 'GBP'];
+// Currencies shown in the exchange-rates section (non-ILS)
+const RATE_CURRENCIES        = CURRENCIES.filter(c => c !== 'ILS');
 const AVATAR_PALETTE         = ['#14b8a6','#f59e0b','#8b5cf6','#ec4899','#3b82f6','#22c55e','#f97316','#64748b'];
 
 function emptyFlight(): Partial<Flight> {
@@ -121,6 +123,22 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setShowAddStay(false);
   }
   function deleteStay(id: string) { set('stays', stays.filter(s => s.id !== id)); }
+
+  // ── Exchange Rates ─────────────────────────────────────────────────────────
+
+  function saveRateInForm(cur: string, val: string) {
+    const num = parseFloat(val);
+    set('exchangeRates', {
+      ...(form.exchangeRates || {}),
+      [cur]: isNaN(num) ? 0 : num,
+    });
+  }
+
+  // All rate currencies: standard list + any extra already stored
+  const allRateCurrencies = [
+    ...RATE_CURRENCIES,
+    ...Object.keys(form.exchangeRates || {}).filter(c => !RATE_CURRENCIES.includes(c) && c !== 'ILS'),
+  ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -357,6 +375,33 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             </div>
           </div>
         )}
+      </section>
+
+      {/* ══ 5. שערי חליפין ══ */}
+      <section className="settings-section">
+        <h3 className="settings-section-title">שערי חליפין → ₪</h3>
+        <p className="settings-hint">כמה שקלים שווה 1 יחידה של כל מטבע — משמש לסיכום ההוצאות</p>
+        <div className="settings-rates-list">
+          {allRateCurrencies.map(cur => (
+            <div key={cur} className="settings-rate-row">
+              <span className="settings-rate-cur">1 {cur}</span>
+              <span className="settings-rate-eq">=</span>
+              <input
+                className="settings-rate-inp"
+                type="number" min="0" step="0.01"
+                placeholder="0.00"
+                value={form.exchangeRates?.[cur] || ''}
+                onChange={e => saveRateInForm(cur, e.target.value)}
+              />
+              <span className="settings-rate-ils">₪</span>
+              {form.exchangeRates?.[cur] ? (
+                <span className="settings-rate-check">✓</span>
+              ) : (
+                <span className="settings-rate-missing">!</span>
+              )}
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* ══ שמור ══ */}

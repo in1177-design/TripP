@@ -188,7 +188,7 @@ function DonutChart({ slices }: { slices: { color: string; amount: number }[] })
 type DisplayExp = Expense & { _perDay?: number; _numDays?: number };
 
 // ─── Main component ───────────────────────────────────────────
-interface Props { trip: Trip; onChange: (t: Trip) => void; }
+interface Props { trip: Trip; onChange: (t: Trip) => void; onNavigate?: (tab: string) => void; }
 
 /** Returns the best default currency for a new expense in this trip.
  *  Priority: last-used currency in expenses → detected local → ILS */
@@ -209,7 +209,7 @@ const blankForm = (trip: Trip): Omit<Expense, 'id'> => ({
 
 const blankNewCat = () => ({ icon: '', name: '', color: '#3498db' });
 
-export default function ExpensesTab({ trip, onChange }: Props) {
+export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
   const expenses    = trip.expenses   || [];
   const customCats  = trip.categories || [] as CustomCategory[];
 
@@ -243,8 +243,7 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   const [addingCat, setAddingCat]           = useState(false);
   const [editingCatId, setEditingCatId]     = useState<string | null>(null);
 
-  // Exchange rates editor
-  const [showRatesEditor, setShowRatesEditor] = useState(false);
+  // Exchange rates are now managed in the Settings tab
 
   // Sub-tab: 'list' | 'stats'
   const [subTab, setSubTab] = useState<'list' | 'stats'>('list');
@@ -332,15 +331,6 @@ export default function ExpensesTab({ trip, onChange }: Props) {
   // only show the "today" block when today is within the trip
   const isOnTrip = trip.startDate && trip.endDate
     && todayStr >= trip.startDate && todayStr <= trip.endDate;
-
-  // update a single exchange rate and save
-  function saveRate(currency: string, value: string) {
-    const num = parseFloat(value);
-    onChange({
-      ...trip,
-      exchangeRates: { ...(trip.exchangeRates || {}), [currency]: isNaN(num) ? 0 : num },
-    });
-  }
 
   // ── Category breakdown — ALL expenses converted to ILS
   const catRowsILS = useMemo(() => {
@@ -499,13 +489,14 @@ export default function ExpensesTab({ trip, onChange }: Props) {
               )}
             </>
           ) : (
-            <div className="exp-stat exp-stat--setup">
-              <span className="exp-stat-label">הגדר שערי חליפין לסיכום בשקלים</span>
-            </div>
+            <button
+              className="exp-stat exp-stat--setup"
+              onClick={() => onNavigate?.('settings')}
+              title="עבור להגדרות שערי חליפין"
+            >
+              <span className="exp-stat-label">הגדר שערי חליפין בהגדרות ←</span>
+            </button>
           )}
-          <button className="exp-rates-btn" onClick={() => setShowRatesEditor(true)} title="שערי חליפין">
-            ⚙️
-          </button>
         </div>
       )}
 
@@ -964,41 +955,6 @@ export default function ExpensesTab({ trip, onChange }: Props) {
         </div>
       )}
 
-      {/* ── EXCHANGE RATES EDITOR ── */}
-      {showRatesEditor && (
-        <div className="exp-overlay" onClick={() => setShowRatesEditor(false)}>
-          <div className="exp-sheet exp-sheet--rates" onClick={e => e.stopPropagation()}>
-            <div className="exp-sheet-hdr">
-              <button className="exp-sheet-close" onClick={() => setShowRatesEditor(false)}>✕</button>
-              <span className="exp-sheet-title">שערי חליפין → ₪</span>
-              <span />
-            </div>
-            <p className="exp-rates-hint">הכנס כמה שקלים שווה 1 יחידה של כל מטבע</p>
-            <div className="exp-rates-list">
-              {(foreignCurs.length > 0 ? foreignCurs : CURRENCIES.filter(c => c !== 'ILS')).map(cur => (
-                <div key={cur} className="exp-rate-row">
-                  <span className="exp-rate-cur">1 {cur}</span>
-                  <span className="exp-rate-eq">=</span>
-                  <input
-                    className="exp-rate-inp"
-                    type="number" min="0" step="0.01"
-                    placeholder="0.00"
-                    value={trip.exchangeRates?.[cur] || ''}
-                    onChange={e => saveRate(cur, e.target.value)}
-                  />
-                  <span className="exp-rate-ils">₪</span>
-                  {trip.exchangeRates?.[cur] ? (
-                    <span className="exp-rate-check">✓</span>
-                  ) : (
-                    <span className="exp-rate-missing">!</span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="exp-rates-tip">💡 שערים נשמרים לנסיעה זו אוטומטית</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
