@@ -1,6 +1,18 @@
-import type { PlaceType } from './types';
+/**
+ * AI place-enrichment — client side.
+ *
+ * Calls the `enrichPlace` Firebase Cloud Function instead of Anthropic directly.
+ * The Anthropic API key is stored as a server-side secret and never included
+ * in the frontend bundle.
+ */
 
-interface PlaceAIResult {
+import type { PlaceType } from './types';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from './firebase';
+import { getApp } from 'firebase/app';
+
+export interface PlaceAIResult {
   nameEn?: string;
   nameHe?: string;
   city?: string;
@@ -15,90 +27,38 @@ interface PlaceAIResult {
   website?: string;
 }
 
-const VALID_TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
+interface EnrichRequest {
+  placeName: string;
+  tripDestination: string;
+  nameHe?: string;
+}
 
 /**
- * Enrich a place with AI details.
- * @param placeName  Hebrew or English name (uses whichever is provided)
- * @param nameHe     Hebrew name (for the prompt; falls back to placeName)
- * @param tripDestination  e.g. "קרקוב"
+ * Enrich a place with AI details via a secure server-side Cloud Function.
+ *
+ * Requires the caller to be signed in with Firebase Auth.
+ * Anonymous sign-in is triggered automatically if no session exists.
+ *
+ * @param placeName       Name used for the lookup (English or Hebrew)
+ * @param tripDestination e.g. "קרקוב"
+ * @param nameHe          Hebrew name hint (optional)
  */
 export async function enrichPlace(
   placeName: string,
   tripDestination: string,
   nameHe?: string,
 ): Promise<PlaceAIResult> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  if (!apiKey) throw new Error('אין API key');
-
-  const prompt = `אתה עוזר לתכנן טיול ל${tripDestination}.
-המשתמש מוסיף מקום בשם: "${placeName}"${nameHe && nameHe !== placeName ? ` (${nameHe})` : ''}
-
-חשוב: המקום חייב להיות ממוקם ב${tripDestination} או באזורה. אם קיימים מקומות בשם זהה במדינות אחרות, התייחס רק לזה שנמצא ביעד הטיול.
-
-ענה על מה שאתה יודע. החזר JSON בלבד (ללא טקסט נוסף). אם אינך בטוח בשדה מסוים — החזר את הניחוש הטוב ביותר שלך. אם אין לך שום מידע על שדה — החזר null.
-{
-  "nameEn": "שם באנגלית (כולל שם רשמי אם שונה ממה שהוזן)",
-  "nameHe": "שם בעברית",
-  "city": "שם העיר בעברית בלבד (חייב להיות עיר ב${tripDestination})",
-  "area": "שכונה או אזור או null",
-  "address": "כתובת רחוב מלאה ככל שידוע לך, למשל 'ul. Energylandia 1, Zator' — או null רק אם באמת אינך יודע כלום",
-  "type": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר",
-  "priceChild": מחיר ילד במטבע מקומי (מספר בלבד) או null,
-  "priceAdult": מחיר מבוגר במטבע מקומי (מספר בלבד) או null,
-  "rating": דירוג מ-1 עד 5 או null,
-  "travelTime": "זמן נסיעה ממרכז העיר, למשל '10 דק'' — או null",
-  "description": "תיאור קצר של המקום בעברית, משפט אחד",
-  "website": "כתובת URL רלוונטית — אתר רשמי, דף Facebook, Instagram, TripAdvisor, Google Maps — כל מה שיש. הניחוש הטוב ביותר שלך אפילו אם אינך בטוח 100%. null רק אם אין לך שום מושג"
-}`;
-
-  // Use direct Anthropic API (works in both dev and production)
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-
-  let response: Response;
-  try {
-    response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timeout);
+  // Ensure the user is signed in (anonymous sign-in is transparent to the user)
+  if (!auth.currentUser) {
+    await signInAnonymously(auth);
   }
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('Anthropic error:', errText);
-    throw new Error(`שגיאה: ${response.status}`);
-  }
+  const functions = getFunctions(getApp(), 'us-central1');
+  const enrichFn = httpsCallable<EnrichRequest, PlaceAIResult>(
+    functions,
+    'enrichPlace',
+  );
 
-  const data = await response.json();
-  const text = data.content?.[0]?.text ?? '{}';
-  const json = JSON.parse(text.replace(/```json|```/g, '').trim());
-
-  return {
-    nameEn: json.nameEn || undefined,
-    nameHe: json.nameHe || undefined,
-    city: json.city || undefined,
-    area: json.area || undefined,
-    address: json.address || undefined,
-    type: VALID_TYPES.includes(json.type) ? json.type : undefined,
-    priceChild: json.priceChild ?? undefined,
-    priceAdult: json.priceAdult ?? undefined,
-    rating: json.rating ?? undefined,
-    travelTime: json.travelTime || undefined,
-    description: json.description || undefined,
-    website: json.website || undefined,
-  };
+  const result = await enrichFn({ placeName, tripDestination, nameHe });
+  return result.data;
 }
