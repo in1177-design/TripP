@@ -58,6 +58,7 @@ export interface Place {
   travelTime?: string;
   description?: string;
   website?: string;
+  address?: string;       // כתובת מלאה (לקישור מפה)
   duration?: number;
   imageUrl?: string;  // cached thumbnail from Wikipedia / manual URL
 }

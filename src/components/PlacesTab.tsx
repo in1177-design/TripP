@@ -59,7 +59,7 @@ const blank = (): Omit<Place, 'id'> => ({
   nameHe: '', nameEn: '', city: '', area: '', type: 'אטרקציה',
   must: false, visited: false, booked: false,
   priceChild: undefined, priceAdult: undefined,
-  rating: undefined, travelTime: '', description: '', website: '', duration: 2,
+  rating: undefined, travelTime: '', description: '', website: '', address: '', duration: 2,
 });
 
 /* ── Wikipedia image fetch ─────────────────────────────────────── */
@@ -554,6 +554,20 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 {/* Description */}
                 {vp.description && <p className="place-view-desc">{vp.description}</p>}
 
+                {/* Address + Maps link */}
+                {(vp.address || vp.nameEn || vp.nameHe) && (() => {
+                  const q = encodeURIComponent(vp.address || `${vp.nameEn || vp.nameHe} ${vp.city || ''}`);
+                  return (
+                    <a
+                      href={`https://maps.google.com/?q=${q}`}
+                      target="_blank" rel="noreferrer"
+                      className="place-view-link place-view-maps-link"
+                    >
+                      📍 {vp.address || `${vp.nameEn || vp.nameHe}${vp.city ? `, ${vp.city}` : ''}`}
+                    </a>
+                  );
+                })()}
+
                 {/* Website */}
                 {vp.website && (
                   <a href={vp.website} target="_blank" rel="noreferrer" className="place-view-link">
@@ -645,6 +659,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
 
               <div className="field"><label>תיאור</label><input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="תיאור קצר..." /></div>
               <div className="field"><label>אתר</label><input value={form.website || ''} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://..." /></div>
+              <div className="field"><label>כתובת</label><input value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="רחוב, עיר (לקישור מפה)" /></div>
 
               {/* Image field + search */}
               <div className="field">

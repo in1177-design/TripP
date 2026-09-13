@@ -666,6 +666,13 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   text-decoration: none; word-break: break-all;
 }
 .place-view-link:hover { text-decoration: underline; }
+.place-view-maps-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--ink-muted);
+  background: var(--surface2); border-radius: 8px;
+  padding: 6px 12px; text-decoration: none; width: fit-content;
+}
+.place-view-maps-link:hover { background: var(--border-mid); color: var(--ink); text-decoration: none; }
 .place-view-actions {
   display: flex; gap: 10px; flex-wrap: wrap;
   padding-top: 6px; border-top: 1px solid var(--border);
