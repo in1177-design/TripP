@@ -12,7 +12,8 @@
 import type { Trip } from '../types';
 import HeroCard                    from './dashboard/HeroCard';
 import BudgetCard                  from './dashboard/BudgetCard';
-import ChecklistCard, { CheckItem } from './dashboard/ChecklistCard';
+import ChecklistCard  from './dashboard/ChecklistCard';
+import type { CheckItem } from './dashboard/ChecklistCard';
 import ScheduleCard                from './dashboard/ScheduleCard';
 
 interface Props {

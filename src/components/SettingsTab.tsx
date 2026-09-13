@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import type { Trip, TripStyle, Flight, Stay, ItemStatus } from '../types';
+import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler } from '../types';
 import { generateId } from '../storage';
 import { stripUndefined } from '../db';
 
 interface Props {
-  trip: Trip;
-  onChange: (trip: Trip) => void;
-  onDelete?: () => void;
+  trip:       Trip;
+  onChange:   (trip: Trip) => void;
+  onDelete?:  () => void;
 }
 
-const STYLES: TripStyle[] = ['תרבות', 'טבע', 'עיר', 'חוף', 'הרפתקאות', 'קולינריה', 'משפחה'];
-const CURRENCIES = ['ILS', 'EUR', 'USD', 'PLN', 'GBP'];
+const STYLES: TripStyle[]   = ['תרבות', 'טבע', 'עיר', 'חוף', 'הרפתקאות', 'קולינריה', 'משפחה'];
+const CURRENCIES             = ['ILS', 'EUR', 'USD', 'PLN', 'GBP'];
+const AVATAR_PALETTE         = ['#14b8a6','#f59e0b','#8b5cf6','#ec4899','#3b82f6','#22c55e','#f97316','#64748b'];
 
 function emptyFlight(): Partial<Flight> {
   return { dir: 'out', flightNo: '', from: '', to: '', date: '', dep: '', arr: '' };
@@ -18,17 +19,35 @@ function emptyFlight(): Partial<Flight> {
 function emptyStay(): Partial<Stay> {
   return { name: '', checkIn: '', checkOut: '', status: 'planned', currency: 'PLN' };
 }
+function emptyTraveler(): Traveler {
+  return { id: generateId(), name: '', email: '' };
+}
+function syncList(existing: Traveler[], count: number): Traveler[] {
+  const list = [...existing];
+  while (list.length < count) list.push(emptyTraveler());
+  return list.slice(0, count);
+}
+function initials(name: string): string {
+  return name.trim().split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '?';
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SettingsTab({ trip, onChange, onDelete }: Props) {
-  const [form, setForm] = useState({ ...trip });
-  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState<Trip>(() => {
+    const f = { ...trip };
+    f.travelersList = syncList(f.travelersList || [], f.travelers || 1);
+    return f;
+  });
+  const [saved,         setSaved]         = useState(false);
   const [showAddFlight, setShowAddFlight] = useState(false);
-  const [showAddStay, setShowAddStay] = useState(false);
-  const [newFlight, setNewFlight] = useState<Partial<Flight>>(emptyFlight());
-  const [newStay, setNewStay] = useState<Partial<Stay>>(emptyStay());
+  const [showAddStay,   setShowAddStay]   = useState(false);
+  const [newFlight,     setNewFlight]     = useState<Partial<Flight>>(emptyFlight());
+  const [newStay,       setNewStay]       = useState<Partial<Stay>>(emptyStay());
 
-  const flights = form.flights || [];
-  const stays = form.stays || [];
+  const flights       = form.flights       || [];
+  const stays         = form.stays         || [];
+  const travelersList = form.travelersList || [];
 
   function set<K extends keyof Trip>(key: K, val: Trip[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -47,57 +66,70 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setTimeout(() => setSaved(false), 2500);
   }
 
-  // ── Flights ──
+  // ── Travelers ──────────────────────────────────────────────────────────────
+
+  function adjustTravelers(delta: number) {
+    const newCount = Math.max(1, Math.min(20, (form.travelers || 1) + delta));
+    const newList  = syncList(travelersList, newCount);
+    setForm(f => ({ ...f, travelers: newCount, travelersList: newList }));
+    setSaved(false);
+  }
+
+  function updateTraveler(idx: number, field: keyof Omit<Traveler,'id'>, val: string) {
+    const newList = travelersList.map((t, i) => i === idx ? { ...t, [field]: val } : t);
+    setForm(f => ({ ...f, travelersList: newList }));
+    setSaved(false);
+  }
+
+  // ── Flights ────────────────────────────────────────────────────────────────
+
   function addFlight() {
     if (!newFlight.from || !newFlight.to) return;
     const fl: Flight = {
-      id: generateId(),
-      dir: (newFlight.dir as 'out' | 'back') || 'out',
+      id:       generateId(),
+      dir:      (newFlight.dir as 'out' | 'back') || 'out',
       flightNo: newFlight.flightNo || '',
-      from: newFlight.from || '',
-      to: newFlight.to || '',
-      date: newFlight.date || form.startDate || '',
-      dep: newFlight.dep || '',
-      arr: newFlight.arr || '',
+      from:     newFlight.from || '',
+      to:       newFlight.to   || '',
+      date:     newFlight.date || form.startDate || '',
+      dep:      newFlight.dep  || '',
+      arr:      newFlight.arr  || '',
     };
     set('flights', [...flights, fl]);
     setNewFlight(emptyFlight());
     setShowAddFlight(false);
   }
+  function deleteFlight(id: string) { set('flights', flights.filter(f => f.id !== id)); }
 
-  function deleteFlight(id: string) {
-    set('flights', flights.filter(f => f.id !== id));
-  }
+  // ── Stays ──────────────────────────────────────────────────────────────────
 
-  // ── Stays ──
   function addStay() {
     if (!newStay.name) return;
     const s: Stay = {
-      id: generateId(),
-      name: newStay.name || '',
-      checkIn: newStay.checkIn || '',
+      id:       generateId(),
+      name:     newStay.name     || '',
+      checkIn:  newStay.checkIn  || '',
       checkOut: newStay.checkOut || '',
-      cost: newStay.cost,
+      cost:     newStay.cost,
       currency: newStay.currency || 'ILS',
-      status: (newStay.status as ItemStatus) || 'planned',
-      address: newStay.address,
-      notes: newStay.notes,
+      status:   (newStay.status as ItemStatus) || 'planned',
+      address:  newStay.address,
+      notes:    newStay.notes,
     };
     set('stays', [...stays, s]);
     setNewStay(emptyStay());
     setShowAddStay(false);
   }
+  function deleteStay(id: string) { set('stays', stays.filter(s => s.id !== id)); }
 
-  function deleteStay(id: string) {
-    set('stays', stays.filter(s => s.id !== id));
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="settings-root" dir="rtl">
 
-      {/* ── BASIC INFO ── */}
+      {/* ══ 1. יעד ותאריכים ══ */}
       <section className="settings-section">
-        <h3 className="settings-section-title">פרטי הטיול</h3>
+        <h3 className="settings-section-title">יעד ותאריכים</h3>
 
         <div className="settings-field">
           <label>יעד</label>
@@ -109,22 +141,27 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
         </div>
 
         <div className="settings-row">
-          <div className="settings-field">
+          <div className="settings-field" style={{ flex: 1 }}>
             <label>תאריך יציאה</label>
             <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
           </div>
-          <div className="settings-field">
+          <div className="settings-field" style={{ flex: 1 }}>
             <label>תאריך חזרה</label>
             <input type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)} />
           </div>
-          <div className="settings-field settings-field--narrow">
-            <label>מטיילים</label>
-            <input
-              type="number" min={1} max={20}
-              value={form.travelers}
-              onChange={e => set('travelers', Number(e.target.value))}
-            />
-          </div>
+        </div>
+
+        <div className="settings-field">
+          <label>תמונת רקע (URL)</label>
+          <input
+            type="url"
+            value={form.coverImage || ''}
+            onChange={e => set('coverImage', e.target.value || undefined as unknown as string)}
+            placeholder="https://... קישור לתמונה רחבה"
+          />
+          {form.coverImage && (
+            <div className="settings-image-preview" style={{ backgroundImage: `url(${form.coverImage})` }} />
+          )}
         </div>
 
         <div className="settings-field">
@@ -143,20 +180,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
           </div>
         </div>
 
-        <div className="settings-field">
-          <label>תמונת רקע לגיבור (URL)</label>
-          <input
-            type="url"
-            value={form.coverImage || ''}
-            onChange={e => set('coverImage', e.target.value || undefined as unknown as string)}
-            placeholder="https://... קישור לתמונה רחבה"
-          />
-          {form.coverImage && (
-            <div className="settings-image-preview" style={{ backgroundImage: `url(${form.coverImage})` }} />
-          )}
-        </div>
-
-        <div className="settings-field">
+        <div className="settings-field" style={{ marginBottom: 0 }}>
           <label>הערות</label>
           <textarea
             value={form.notes}
@@ -167,7 +191,70 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
         </div>
       </section>
 
-      {/* ── FLIGHTS ── */}
+      {/* ══ 2. מטיילים ══ */}
+      <section className="settings-section">
+        <h3 className="settings-section-title">מטיילים</h3>
+
+        {/* +/- counter */}
+        <div className="trv-counter">
+          <button
+            className="trv-counter-btn"
+            onClick={() => adjustTravelers(-1)}
+            disabled={form.travelers <= 1}
+            aria-label="הפחת מטייל"
+          >−</button>
+          <span className="trv-count-num">{form.travelers}</span>
+          <button
+            className="trv-counter-btn"
+            onClick={() => adjustTravelers(1)}
+            disabled={form.travelers >= 20}
+            aria-label="הוסף מטייל"
+          >+</button>
+          <span className="trv-count-label">מטיילים</span>
+        </div>
+
+        {/* Traveler cards */}
+        {travelersList.length > 0 && (
+          <div className="trv-grid">
+            {travelersList.map((t, i) => {
+              const color = AVATAR_PALETTE[i % AVATAR_PALETTE.length];
+              const ini   = initials(t.name);
+              return (
+                <div key={t.id} className="trv-card">
+                  {/* Avatar */}
+                  <div className="trv-avatar" style={{ background: color }}>
+                    {t.avatar
+                      ? <img src={t.avatar} alt={t.name || `מטייל ${i+1}`} />
+                      : <span>{ini}</span>}
+                  </div>
+
+                  {/* Inputs */}
+                  <div className="trv-inputs">
+                    <input
+                      className="trv-input trv-input--name"
+                      placeholder={`מטייל ${i + 1}`}
+                      value={t.name}
+                      onChange={e => updateTraveler(i, 'name', e.target.value)}
+                    />
+                    <input
+                      className="trv-input trv-input--email"
+                      type="email"
+                      placeholder="אימייל לגישה"
+                      value={t.email}
+                      dir="ltr"
+                      onChange={e => updateTraveler(i, 'email', e.target.value)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <p className="trv-hint">כל מטייל יוכל להתחבר עם האימייל שלו ולראות את התכנון</p>
+      </section>
+
+      {/* ══ 3. טיסות ══ */}
       <section className="settings-section">
         <div className="settings-section-head">
           <h3 className="settings-section-title">טיסות</h3>
@@ -196,7 +283,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                 <option value="back">חזור</option>
               </select>
               <input placeholder="מ-" value={newFlight.from || ''} onChange={e => setNewFlight(f => ({ ...f, from: e.target.value }))} />
-              <input placeholder="ל-" value={newFlight.to || ''} onChange={e => setNewFlight(f => ({ ...f, to: e.target.value }))} />
+              <input placeholder="ל-" value={newFlight.to   || ''} onChange={e => setNewFlight(f => ({ ...f, to:   e.target.value }))} />
               <input placeholder="מספר טיסה" value={newFlight.flightNo || ''} onChange={e => setNewFlight(f => ({ ...f, flightNo: e.target.value }))} />
             </div>
             <div className="settings-row">
@@ -206,13 +293,13 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             </div>
             <div className="settings-row">
               <button className="btn-primary" onClick={addFlight}>שמור טיסה</button>
-              <button className="btn-ghost" onClick={() => { setShowAddFlight(false); setNewFlight(emptyFlight()); }}>ביטול</button>
+              <button className="btn-ghost"   onClick={() => { setShowAddFlight(false); setNewFlight(emptyFlight()); }}>ביטול</button>
             </div>
           </div>
         )}
       </section>
 
-      {/* ── STAYS ── */}
+      {/* ══ 4. לינות ══ */}
       <section className="settings-section">
         <div className="settings-section-head">
           <h3 className="settings-section-title">לינות</h3>
@@ -228,7 +315,11 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             <div className="ssr-name">{s.name}</div>
             <div className="ssr-info">
               <span>{s.checkIn} → {s.checkOut}</span>
-              {s.cost ? <span>{CURRENCIES.map(c => c === s.currency ? (c === 'EUR' ? '€' : c === 'PLN' ? 'zł' : c === 'ILS' ? '₪' : c === 'USD' ? '$' : c) : '').join('')}{s.cost.toLocaleString()}</span> : null}
+              {s.cost
+                ? <span>{CURRENCIES.map(c => c === s.currency
+                    ? (c==='EUR'?'€':c==='PLN'?'zł':c==='ILS'?'₪':c==='USD'?'$':c)
+                    : '').join('')}{s.cost.toLocaleString()}</span>
+                : null}
             </div>
             {s.address && <div className="ssr-addr">{s.address}</div>}
             <button className="btn-icon-danger" onClick={() => deleteStay(s.id)}>✕</button>
@@ -245,7 +336,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
               </select>
             </div>
             <div className="settings-row">
-              <input type="date" value={newStay.checkIn || ''} onChange={e => setNewStay(s => ({ ...s, checkIn: e.target.value }))} />
+              <input type="date" value={newStay.checkIn  || ''} onChange={e => setNewStay(s => ({ ...s, checkIn:  e.target.value }))} />
               <input type="date" value={newStay.checkOut || ''} onChange={e => setNewStay(s => ({ ...s, checkOut: e.target.value }))} />
             </div>
             <div className="settings-row">
@@ -262,24 +353,26 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             </div>
             <div className="settings-row">
               <button className="btn-primary" onClick={addStay}>שמור לינה</button>
-              <button className="btn-ghost" onClick={() => { setShowAddStay(false); setNewStay(emptyStay()); }}>ביטול</button>
+              <button className="btn-ghost"   onClick={() => { setShowAddStay(false); setNewStay(emptyStay()); }}>ביטול</button>
             </div>
           </div>
         )}
       </section>
 
-      {/* ── SAVE ── */}
+      {/* ══ שמור ══ */}
       <div className="settings-save-bar">
         <button className="btn-primary" onClick={save}>
           {saved ? '✅ נשמר!' : 'שמור שינויים'}
         </button>
       </div>
 
-      {/* ── DANGER ZONE ── */}
+      {/* ══ אזור סכנה ══ */}
       {onDelete && (
         <section className="settings-section settings-section--danger">
           <h3 className="settings-section-title">אזור סכנה</h3>
-          <p className="settings-empty" style={{ marginBottom: 14 }}>מחיקת הטיול תמחק את כל המקומות, המסלול וההוצאות. פעולה זו אינה הפיכה.</p>
+          <p className="settings-empty" style={{ marginBottom: 14 }}>
+            מחיקת הטיול תמחק את כל המקומות, המסלול וההוצאות. פעולה זו אינה הפיכה.
+          </p>
           <button
             className="btn-danger-outline"
             onClick={() => {

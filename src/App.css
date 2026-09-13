@@ -2245,6 +2245,72 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 .settings-empty { color: var(--ink-muted); font-size: .88rem; margin-bottom: 6px; }
 
+/* ── Travelers counter + cards ─────────────────────────────────────────────── */
+.trv-counter {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 22px;
+}
+.trv-counter-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border-mid);
+  background: var(--surface2);
+  color: var(--ink);
+  font-size: 1.3rem; font-weight: 700; line-height: 1;
+  cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, background .15s;
+}
+.trv-counter-btn:hover:not(:disabled) {
+  border-color: var(--ink); background: var(--dark); color: var(--yellow);
+}
+.trv-counter-btn:disabled { opacity: .3; cursor: default; }
+.trv-count-num {
+  font-size: 2.2rem; font-weight: 900; line-height: 1;
+  min-width: 32px; text-align: center;
+}
+.trv-count-label {
+  font-size: .95rem; font-weight: 600; color: var(--ink-muted);
+}
+
+.trv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.trv-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 14px 14px;
+}
+.trv-avatar {
+  width: 60px; height: 60px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; font-weight: 800; color: #fff;
+  overflow: hidden; flex-shrink: 0;
+}
+.trv-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.trv-inputs { width: 100%; display: flex; flex-direction: column; gap: 7px; }
+.trv-input {
+  width: 100%; border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-family: inherit; background: var(--surface); color: var(--ink);
+  transition: border-color .15s;
+  box-sizing: border-box;
+}
+.trv-input:focus { outline: none; border-color: var(--ink); }
+.trv-input--name { font-size: .9rem; font-weight: 600; text-align: center; }
+.trv-input--email { font-size: .8rem; color: var(--ink-muted); text-align: left; }
+.trv-hint {
+  font-size: .78rem; color: var(--ink-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px; margin-top: 4px;
+}
+
 /* Style chips */
 .style-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .style-chip {

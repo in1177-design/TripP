@@ -11,12 +11,20 @@ export interface CustomCategory {
   subcats?: string[]; // user-defined subcategories
 }
 
+export interface Traveler {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string; // image URL; if absent, initials are shown
+}
+
 export interface Trip {
   id: string;
   destination: string;
   startDate: string;
   endDate: string;
   travelers: number;
+  travelersList?: Traveler[];      // per-person details (name + email for sharing)
   style: TripStyle[];
   notes: string;
   documents: Document[];
