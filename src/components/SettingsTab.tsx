@@ -119,7 +119,13 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   }
 
   function saveSection(name: string) {
-    onChange(stripUndefined(form) as Trip);
+    // Always carry forward the latest participants/participantUids from the
+    // live trip prop — form is initialised once and may have stale values.
+    onChange(stripUndefined({
+      ...form,
+      participants:    trip.participants,
+      participantUids: trip.participantUids,
+    }) as Trip);
     setSavedSection(name);
     setTimeout(() => setSavedSection(null), 2500);
   }
@@ -246,7 +252,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     };
     const updated = [...flights, fl];
     setForm(f => ({ ...f, flights: updated }));
-    onChange(stripUndefined({ ...form, flights: updated }) as Trip);
+    onChange(stripUndefined({ ...form, flights: updated, participants: trip.participants, participantUids: trip.participantUids }) as Trip);
     setSavedSection('flights');
     setTimeout(() => setSavedSection(null), 2500);
     setNewFlight(emptyFlight());
@@ -255,7 +261,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   function deleteFlight(id: string) {
     const updated = flights.filter(f => f.id !== id);
     setForm(f => ({ ...f, flights: updated }));
-    onChange(stripUndefined({ ...form, flights: updated }) as Trip);
+    onChange(stripUndefined({ ...form, flights: updated, participants: trip.participants, participantUids: trip.participantUids }) as Trip);
   }
 
   // ── Stays ──────────────────────────────────────────────────────────────────
@@ -275,7 +281,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     };
     const updated = [...stays, s];
     setForm(f => ({ ...f, stays: updated }));
-    onChange(stripUndefined({ ...form, stays: updated }) as Trip);
+    onChange(stripUndefined({ ...form, stays: updated, participants: trip.participants, participantUids: trip.participantUids }) as Trip);
     setSavedSection('stays');
     setTimeout(() => setSavedSection(null), 2500);
     setNewStay(emptyStay());
@@ -284,7 +290,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   function deleteStay(id: string) {
     const updated = stays.filter(s => s.id !== id);
     setForm(f => ({ ...f, stays: updated }));
-    onChange(stripUndefined({ ...form, stays: updated }) as Trip);
+    onChange(stripUndefined({ ...form, stays: updated, participants: trip.participants, participantUids: trip.participantUids }) as Trip);
   }
 
   // ── Exchange Rates ─────────────────────────────────────────────────────────
