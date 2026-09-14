@@ -199,3 +199,137 @@ export const enrichPlace = onCall(
     };
   },
 );
+
+// ── shareTrip ─────────────────────────────────────────────────────────────────
+
+interface ShareRequest {
+  tripId: string;
+  email:  string;
+  role:   'editor' | 'viewer';
+}
+
+interface ShareResponse {
+  uid:         string;
+  displayName: string;
+  email:       string;
+}
+
+export const shareTrip = onCall(
+  {
+    maxInstances:   5,
+    timeoutSeconds: 15,
+    cors: [
+      'https://in1177-design.github.io',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:4173',
+    ],
+  },
+  async (request): Promise<ShareResponse> => {
+    // 1. Auth check
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'נדרשת כניסה לחשבון.');
+    }
+    const callerUid = request.auth.uid;
+
+    // 2. Validate input
+    const { tripId, email, role } = request.data as ShareRequest;
+    if (!tripId || typeof tripId !== 'string') throw new HttpsError('invalid-argument', 'tripId חסר.');
+    if (!email  || typeof email  !== 'string') throw new HttpsError('invalid-argument', 'email חסר.');
+    if (role !== 'editor' && role !== 'viewer') throw new HttpsError('invalid-argument', 'role לא תקין.');
+
+    const emailLower = email.trim().toLowerCase();
+
+    // 3. Verify caller is owner of the trip
+    const tripRef  = db.doc(`trips/${tripId}`);
+    const tripSnap = await tripRef.get();
+    if (!tripSnap.exists) throw new HttpsError('not-found', 'הטיול לא נמצא.');
+
+    const tripData = tripSnap.data() as { ownerId?: string; participants?: unknown[]; participantUids?: string[] };
+    if (tripData.ownerId !== callerUid) {
+      throw new HttpsError('permission-denied', 'רק בעל הטיול יכול לשתף אותו.');
+    }
+
+    // 4. Look up target user by email
+    let targetUser: admin.auth.UserRecord;
+    try {
+      targetUser = await admin.auth().getUserByEmail(emailLower);
+    } catch {
+      throw new HttpsError('not-found',
+        'לא נמצא משתמש עם כתובת המייל הזו. על המשתמש להתחבר לפחות פעם אחת לאפליקציה.');
+    }
+
+    const targetUid = targetUser.uid;
+    if (targetUid === callerUid) throw new HttpsError('invalid-argument', 'לא ניתן לשתף עם עצמך.');
+
+    // 5. Build participant record
+    const newParticipant = {
+      uid:         targetUid,
+      email:       emailLower,
+      displayName: targetUser.displayName ?? emailLower,
+      role,
+    };
+
+    // 6. Update trip — add participant atomically
+    const existingParticipants = (tripData.participants ?? []) as Array<{ uid: string }>;
+    const filtered = existingParticipants.filter(p => p.uid !== targetUid); // replace if already exists
+
+    await tripRef.update({
+      participants:    [...filtered, newParticipant],
+      participantUids: FieldValue.arrayUnion(targetUid),
+    });
+
+    return {
+      uid:         targetUid,
+      displayName: newParticipant.displayName,
+      email:       emailLower,
+    };
+  },
+);
+
+// ── removeTripParticipant ─────────────────────────────────────────────────────
+
+interface RemoveRequest {
+  tripId:         string;
+  participantUid: string;
+}
+
+export const removeTripParticipant = onCall(
+  {
+    maxInstances:   5,
+    timeoutSeconds: 15,
+    cors: [
+      'https://in1177-design.github.io',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:4173',
+    ],
+  },
+  async (request): Promise<{ ok: true }> => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
+    const callerUid = request.auth.uid;
+
+    const { tripId, participantUid } = request.data as RemoveRequest;
+    if (!tripId || !participantUid) throw new HttpsError('invalid-argument', 'פרמטרים חסרים.');
+
+    const tripRef  = db.doc(`trips/${tripId}`);
+    const tripSnap = await tripRef.get();
+    if (!tripSnap.exists) throw new HttpsError('not-found', 'הטיול לא נמצא.');
+
+    const tripData = tripSnap.data() as { ownerId?: string; participants?: Array<{ uid: string }> };
+
+    // Only owner can remove others; a participant can remove themselves
+    if (tripData.ownerId !== callerUid && callerUid !== participantUid) {
+      throw new HttpsError('permission-denied', 'אין הרשאה להסיר משתתף זה.');
+    }
+
+    const updatedParticipants = (tripData.participants ?? []).filter(p => p.uid !== participantUid);
+
+    await tripRef.update({
+      participants:    updatedParticipants,
+      participantUids: FieldValue.arrayRemove(participantUid),
+    });
+
+    return { ok: true };
+  },
+);
