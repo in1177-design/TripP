@@ -10,9 +10,10 @@ interface Props {
 }
 
 interface ShareResponse {
-  uid: string;
-  displayName: string;
-  email: string;
+  uid?:         string;
+  displayName?: string;
+  email:        string;
+  pending:      boolean;
 }
 
 const ROLE_LABELS: Record<TripRole, string> = {
@@ -44,23 +45,29 @@ export default function ShareSheet({ trip, onClose, onUpdate }: Props) {
       >(fns, 'shareTrip');
 
       const result = await shareFn({ tripId: trip.id, email: email.trim(), role });
-      const newParticipant: TripParticipant = {
-        uid:         result.data.uid,
-        email:       result.data.email,
-        displayName: result.data.displayName,
-        role,
-      };
 
-      // Optimistically update local trip state
-      const existing = participants.filter(p => p.uid !== result.data.uid);
-      const updated: Trip = {
-        ...trip,
-        participants:    [...existing, newParticipant],
-        participantUids: [...new Set([...(trip.participantUids ?? []), result.data.uid])],
-      };
-      onUpdate(updated);
-      setSuccess(`${result.data.displayName} נוסף${role === 'editor' ? ' כעורך' : ' כצופה'} ✓`);
-      setEmail('');
+      if (result.data.pending) {
+        // User hasn't registered yet — invite stored; will activate on sign-in
+        setSuccess(`📨 הזמנה נשמרה עבור ${result.data.email} — הטיול יופיע אצלה כשתיכנס לאפליקציה`);
+        // Don't clear email — user can see what was sent
+      } else {
+        // User already in Firebase Auth — add to local state immediately
+        const newParticipant: TripParticipant = {
+          uid:         result.data.uid!,
+          email:       result.data.email,
+          displayName: result.data.displayName,
+          role,
+        };
+        const existing = participants.filter(p => p.uid !== result.data.uid);
+        const updated: Trip = {
+          ...trip,
+          participants:    [...existing, newParticipant],
+          participantUids: [...new Set([...(trip.participantUids ?? []), result.data.uid!])],
+        };
+        onUpdate(updated);
+        setSuccess(`✅ ${result.data.displayName ?? result.data.email} נוסף${role === 'editor' ? ' כעורך' : ' כצופה'}`);
+        // Keep email visible so user can see what was sent
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       // Firebase wraps the error message
@@ -182,7 +189,7 @@ export default function ShareSheet({ trip, onClose, onUpdate }: Props) {
         )}
 
         <p className="share-note">
-          💡 על המשתמש להתחבר פעם אחת לאפליקציה לפני שניתן להוסיף אותו.
+          💡 אם המוזמן עדיין לא נרשם, ההזמנה תיכנס לתוקף כשהוא יפתח את האפליקציה בפעם הראשונה.
         </p>
       </div>
     </div>

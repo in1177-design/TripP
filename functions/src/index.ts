@@ -208,6 +208,7 @@ interface MockPlace {
   nameHe?: string;
   address: string;
   category: string;
+  country: string; // ISO-2 code — used to filter by trip destination
   location: { lat: number; lng: number };
   description?: string;
   website?: string;
@@ -215,49 +216,99 @@ interface MockPlace {
 }
 
 const MOCK_PLACES: MockPlace[] = [
-  // Poland — Kraków
-  { providerPlaceId: 'mock_krakow_wawel', name: 'Wawel Royal Castle', nameHe: 'טירת וואוול', address: 'Wawel 5, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0542, lng: 19.9355 }, website: 'https://wawel.krakow.pl', description: 'Medieval castle complex on Wawel Hill' },
-  { providerPlaceId: 'mock_krakow_pod_aniolami', name: 'Pod Aniolami', address: 'ul. Grodzka 35, 31-001 Kraków', category: 'מסעדה', location: { lat: 50.0591, lng: 19.9382 }, description: 'Traditional Polish cuisine in a historic cellar' },
-  { providerPlaceId: 'mock_krakow_old_town', name: 'Stare Miasto (Old Town)', nameHe: 'העיר העתיקה של קרקוב', address: 'Rynek Główny, Kraków', category: 'שכונה', location: { lat: 50.0614, lng: 19.9372 }, description: 'Historic city center with the main market square' },
-  { providerPlaceId: 'mock_krakow_salt_mine', name: 'Wieliczka Salt Mine', nameHe: "מכרה המלח וייליצ'קה", address: 'Park Kingi 1, 32-020 Wieliczka', category: 'אטרקציה', location: { lat: 49.9838, lng: 20.0548 }, website: 'https://wieliczka-saltmine.com', description: 'UNESCO World Heritage underground salt mine' },
-  { providerPlaceId: 'mock_krakow_kazimierz', name: 'Kazimierz Jewish Quarter', nameHe: 'רובע קזימייז', address: 'Kazimierz, Kraków', category: 'שכונה', location: { lat: 50.0515, lng: 19.9440 }, description: 'Historic Jewish quarter with synagogues and galleries' },
-  { providerPlaceId: 'mock_krakow_market', name: 'Stary Kleparz Market', nameHe: "שוק סטארי קלפאז'", address: 'ul. Stary Kleparz, Kraków', category: 'שוק', location: { lat: 50.0671, lng: 19.9400 }, description: 'Traditional outdoor food and flower market' },
-  { providerPlaceId: 'mock_krakow_hawelka', name: 'Hawelka', address: 'Rynek Główny 34, 31-010 Kraków', category: 'מסעדה', location: { lat: 50.0618, lng: 19.9378 }, website: 'https://hawelka.pl', description: 'Iconic restaurant on the Main Market Square since 1876' },
-  { providerPlaceId: 'mock_krakow_cloth_hall', name: 'Cloth Hall (Sukiennice)', nameHe: 'אולם הבד', address: 'Rynek Główny 1-3, 31-042 Kraków', category: 'שוק', location: { lat: 50.0616, lng: 19.9375 }, description: 'Gothic trading hall in the center of the main square' },
-  { providerPlaceId: 'mock_krakow_schindler', name: "Schindler's Factory Museum", nameHe: "מפעל שינדלר", address: 'ul. Lipowa 4, 30-702 Kraków', category: 'מוזיאון', location: { lat: 50.0474, lng: 19.9612 }, website: 'https://muzeumkrakowa.pl', description: 'Museum dedicated to WWII Kraków history' },
-  // Israel
-  { providerPlaceId: 'mock_tlv_carmel', name: 'Carmel Market', nameHe: 'שוק הכרמל', address: 'Shuk HaCarmel, Tel Aviv', category: 'שוק', location: { lat: 32.0653, lng: 34.7663 }, description: 'Bustling outdoor market in Tel Aviv' },
-  { providerPlaceId: 'mock_tlv_jaffa', name: 'Jaffa Old City', nameHe: 'עיר עתיקה של יפו', address: 'Old Jaffa, Tel Aviv-Yafo', category: 'שכונה', location: { lat: 32.0531, lng: 34.7518 } },
-  { providerPlaceId: 'mock_tlv_habasta', name: 'HaBasta', nameHe: 'הבסטה', address: 'Hashomer St 4, Tel Aviv', category: 'מסעדה', location: { lat: 32.0657, lng: 34.7690 }, description: 'Popular farm-to-table restaurant near Carmel Market' },
-  // France — Paris
-  { providerPlaceId: 'mock_paris_eiffel', name: 'Eiffel Tower', nameHe: 'מגדל אייפל', address: 'Champ de Mars, 5 Av. Anatole France, 75007 Paris', category: 'אטרקציה', location: { lat: 48.8584, lng: 2.2945 }, website: 'https://www.toureiffel.paris' },
-  { providerPlaceId: 'mock_paris_louvre', name: 'Louvre Museum', nameHe: 'מוזיאון הלובר', address: 'Rue de Rivoli, 75001 Paris', category: 'מוזיאון', location: { lat: 48.8606, lng: 2.3376 }, website: 'https://www.louvre.fr' },
-  { providerPlaceId: 'mock_paris_comptoir', name: 'Le Comptoir du Relais', address: "9 Carrefour de l'Odéon, 75006 Paris", category: 'מסעדה', location: { lat: 48.8515, lng: 2.3401 }, description: 'Classic French bistro in Saint-Germain' },
-  // Italy — Rome
-  { providerPlaceId: 'mock_rome_colosseum', name: 'Colosseum', nameHe: 'הקולוסיאום', address: 'Piazza del Colosseo, 1, 00184 Roma RM', category: 'אטרקציה', location: { lat: 41.8902, lng: 12.4922 }, website: 'https://www.parcocolosseo.it' },
-  { providerPlaceId: 'mock_rome_vatican', name: 'Vatican Museums', nameHe: 'מוזיאוני הוותיקן', address: 'Viale Vaticano, 00165 Roma RM', category: 'מוזיאון', location: { lat: 41.9065, lng: 12.4534 } },
-  { providerPlaceId: 'mock_rome_da_enzo', name: 'Da Enzo al 29', address: 'Via dei Vascellari, 29, 00153 Roma RM', category: 'מסעדה', location: { lat: 41.8879, lng: 12.4703 }, description: 'Trattoria in Trastevere neighborhood' },
-  // Spain — Barcelona
-  { providerPlaceId: 'mock_bcn_sagrada', name: 'Sagrada Família', nameHe: 'סגרדה פמיליה', address: 'C/ de Mallorca, 401, 08013 Barcelona', category: 'אטרקציה', location: { lat: 41.4036, lng: 2.1744 }, website: 'https://sagradafamilia.org' },
-  { providerPlaceId: 'mock_bcn_boqueria', name: 'La Boqueria Market', nameHe: 'שוק לה בוקריה', address: 'La Rambla, 91, 08001 Barcelona', category: 'שוק', location: { lat: 41.3817, lng: 2.1718 }, description: 'Famous public market on La Rambla' },
-  // Netherlands — Amsterdam
-  { providerPlaceId: 'mock_ams_rijks', name: 'Rijksmuseum', nameHe: 'ריקסמוזיאום', address: 'Museumstraat 1, 1071 XX Amsterdam', category: 'מוזיאון', location: { lat: 52.3600, lng: 4.8852 }, website: 'https://www.rijksmuseum.nl' },
-  { providerPlaceId: 'mock_ams_vondelpark', name: 'Vondelpark', nameHe: 'פארק פונדל', address: 'Vondelpark, 1071 Amsterdam', category: 'פארק', location: { lat: 52.3579, lng: 4.8687 }, description: "Amsterdam's largest and most famous park" },
-  // Greece — Athens
-  { providerPlaceId: 'mock_ath_acropolis', name: 'Acropolis of Athens', nameHe: 'האקרופוליס של אתונה', address: 'Acropolis, Athens 105 58, Greece', category: 'אטרקציה', location: { lat: 37.9715, lng: 23.7267 }, website: 'https://www.theacropolismuseum.gr' },
-  { providerPlaceId: 'mock_ath_monastiraki', name: 'Monastiraki Flea Market', nameHe: 'שוק מונסטירקי', address: 'Platia Monastirakiou, Athina 105 55', category: 'שוק', location: { lat: 37.9762, lng: 23.7243 } },
+  // ── Poland — Kraków ───────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_krakow_wawel', country: 'PL', name: 'Wawel Royal Castle', nameHe: 'טירת וואוול', address: 'Wawel 5, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0542, lng: 19.9355 }, website: 'https://wawel.krakow.pl', description: 'Medieval castle complex on Wawel Hill' },
+  { providerPlaceId: 'mock_krakow_pod_aniolami', country: 'PL', name: 'Pod Aniolami', address: 'ul. Grodzka 35, 31-001 Kraków', category: 'מסעדה', location: { lat: 50.0591, lng: 19.9382 }, description: 'Traditional Polish cuisine in a historic cellar' },
+  { providerPlaceId: 'mock_krakow_old_town', country: 'PL', name: 'Stare Miasto (Old Town)', nameHe: 'העיר העתיקה של קרקוב', address: 'Rynek Główny, Kraków', category: 'שכונה', location: { lat: 50.0614, lng: 19.9372 }, description: 'Historic city center with the main market square' },
+  { providerPlaceId: 'mock_krakow_salt_mine', country: 'PL', name: 'Wieliczka Salt Mine', nameHe: "מכרה המלח וייליצ'קה", address: 'Park Kingi 1, 32-020 Wieliczka', category: 'אטרקציה', location: { lat: 49.9838, lng: 20.0548 }, website: 'https://wieliczka-saltmine.com', description: 'UNESCO World Heritage underground salt mine' },
+  { providerPlaceId: 'mock_krakow_kazimierz', country: 'PL', name: 'Kazimierz Jewish Quarter', nameHe: 'רובע קזימייז', address: 'Kazimierz, Kraków', category: 'שכונה', location: { lat: 50.0515, lng: 19.9440 }, description: 'Historic Jewish quarter with synagogues and galleries' },
+  { providerPlaceId: 'mock_krakow_market', country: 'PL', name: 'Stary Kleparz Market', nameHe: "שוק סטארי קלפאז'", address: 'ul. Stary Kleparz, Kraków', category: 'שוק', location: { lat: 50.0671, lng: 19.9400 }, description: 'Traditional outdoor food and flower market' },
+  { providerPlaceId: 'mock_krakow_hawelka', country: 'PL', name: 'Hawelka', address: 'Rynek Główny 34, 31-010 Kraków', category: 'מסעדה', location: { lat: 50.0618, lng: 19.9378 }, website: 'https://hawelka.pl', description: 'Iconic restaurant on the Main Market Square since 1876' },
+  { providerPlaceId: 'mock_krakow_cloth_hall', country: 'PL', name: 'Cloth Hall (Sukiennice)', nameHe: 'אולם הבד', address: 'Rynek Główny 1-3, 31-042 Kraków', category: 'שוק', location: { lat: 50.0616, lng: 19.9375 }, description: 'Gothic trading hall in the center of the main square' },
+  { providerPlaceId: 'mock_krakow_schindler', country: 'PL', name: "Schindler's Factory Museum", nameHe: 'מפעל שינדלר', address: 'ul. Lipowa 4, 30-702 Kraków', category: 'מוזיאון', location: { lat: 50.0474, lng: 19.9612 }, website: 'https://muzeumkrakowa.pl', description: 'Museum dedicated to WWII Kraków history' },
+  { providerPlaceId: 'mock_krakow_national_museum', country: 'PL', name: 'National Museum in Kraków', nameHe: 'המוזיאון הלאומי בקרקוב', address: 'al. 3 Maja 1, 30-062 Kraków', category: 'מוזיאון', location: { lat: 50.0617, lng: 19.9186 }, website: 'https://mnk.pl', description: 'Largest museum in Poland' },
+  { providerPlaceId: 'mock_krakow_wawel_dragon', country: 'PL', name: 'Smocza Jama (Dragon Cave)', nameHe: "מערת הדרקון של וואוול", address: 'Wawel, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0535, lng: 19.9348 }, description: 'Legendary cave beneath Wawel Hill' },
+  // Poland — Zakopane & Tatry
+  { providerPlaceId: 'mock_zak_chocho', country: 'PL', name: 'Chochołowskie Termy', nameHe: 'מרחצאות חוחולובסקיה', address: 'ul. Jana Pawła II 2, 34-481 Chochołów', category: 'אטרקציה', location: { lat: 49.4741, lng: 19.7613 }, website: 'https://chocholowskietermy.pl', description: 'Popular thermal baths and water park near Zakopane' },
+  { providerPlaceId: 'mock_zak_krupowki', country: 'PL', name: 'Krupówki Street', nameHe: 'רחוב קרופובקי', address: 'ul. Krupówki, 34-500 Zakopane', category: 'שכונה', location: { lat: 49.2986, lng: 19.9551 }, description: 'Main pedestrian street of Zakopane with restaurants and shops' },
+  { providerPlaceId: 'mock_zak_morskie_oko', country: 'PL', name: 'Morskie Oko Lake', nameHe: 'אגם מורסקיה אוקו', address: 'Tatrzański Park Narodowy, 34-500 Zakopane', category: 'פארק', location: { lat: 49.1993, lng: 20.0703 }, description: 'The most famous mountain lake in Poland, a 9km hike from Zakopane' },
+  { providerPlaceId: 'mock_zak_gubalowka', country: 'PL', name: 'Gubałówka Hill', nameHe: "גוּבַּלוֹבְקָה", address: 'ul. Gubałówka, 34-500 Zakopane', category: 'אטרקציה', location: { lat: 49.3082, lng: 19.9490 }, description: 'Mountain viewpoint above Zakopane, reachable by funicular' },
+  { providerPlaceId: 'mock_zak_tatra_np', country: 'PL', name: 'Tatra National Park', nameHe: 'הפארק הלאומי הטטרי', address: 'Kuźnice, 34-500 Zakopane', category: 'פארק', location: { lat: 49.2632, lng: 19.9821 }, website: 'https://tpn.pl', description: 'The only mountain national park in Poland — stunning peaks and valleys' },
+  { providerPlaceId: 'mock_zak_termy_bania', country: 'PL', name: 'Termy Bania', nameHe: "טרמי בניה (בִּיאָלְקָה)", address: 'ul. Bania 1, 34-405 Białka Tatrzańska', category: 'אטרקציה', location: { lat: 49.3811, lng: 20.0964 }, website: 'https://termybania.pl', description: 'Thermal pools and spa with panoramic Tatra views' },
+  { providerPlaceId: 'mock_zak_dolina_koscieliska', country: 'PL', name: 'Kościeliska Valley', nameHe: "עמק קושצ'יליסקה", address: 'Dolina Kościeliska, Tatrzański Park Narodowy', category: 'פארק', location: { lat: 49.2660, lng: 19.8757 }, description: 'Beautiful valley with limestone gorges and caves, easy hiking' },
+  // Poland — Auschwitz
+  { providerPlaceId: 'mock_auschwitz', country: 'PL', name: 'Auschwitz-Birkenau Memorial and Museum', nameHe: 'אנדרטת ומוזיאון אושוויץ-בירקנאו', address: 'ul. Więźniów Oświęcimia 20, 32-603 Oświęcim', category: 'מוזיאון', location: { lat: 50.0271, lng: 19.2037 }, website: 'https://auschwitz.org', description: 'UNESCO World Heritage site — former Nazi concentration camp' },
+  // Poland — Energylandia (Zator)
+  { providerPlaceId: 'mock_energylandia', country: 'PL', name: 'Energylandia', nameHe: 'אנרג\'יילנד', address: 'Brody 1, 32-640 Zator', category: 'אטרקציה', location: { lat: 49.9909, lng: 19.4398 }, website: 'https://energylandia.pl', description: "Poland's largest amusement park" },
+  // ── Israel ────────────────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_tlv_carmel', country: 'IL', name: 'Carmel Market', nameHe: 'שוק הכרמל', address: 'Shuk HaCarmel, Tel Aviv', category: 'שוק', location: { lat: 32.0653, lng: 34.7663 }, description: 'Bustling outdoor market in Tel Aviv' },
+  { providerPlaceId: 'mock_tlv_jaffa', country: 'IL', name: 'Jaffa Old City', nameHe: 'עיר עתיקה של יפו', address: 'Old Jaffa, Tel Aviv-Yafo', category: 'שכונה', location: { lat: 32.0531, lng: 34.7518 } },
+  { providerPlaceId: 'mock_tlv_habasta', country: 'IL', name: 'HaBasta', nameHe: 'הבסטה', address: 'Hashomer St 4, Tel Aviv', category: 'מסעדה', location: { lat: 32.0657, lng: 34.7690 }, description: 'Popular farm-to-table restaurant near Carmel Market' },
+  // ── France — Paris ────────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_paris_eiffel', country: 'FR', name: 'Eiffel Tower', nameHe: 'מגדל אייפל', address: 'Champ de Mars, 5 Av. Anatole France, 75007 Paris', category: 'אטרקציה', location: { lat: 48.8584, lng: 2.2945 }, website: 'https://www.toureiffel.paris' },
+  { providerPlaceId: 'mock_paris_louvre', country: 'FR', name: 'Louvre Museum', nameHe: 'מוזיאון הלובר', address: 'Rue de Rivoli, 75001 Paris', category: 'מוזיאון', location: { lat: 48.8606, lng: 2.3376 }, website: 'https://www.louvre.fr' },
+  { providerPlaceId: 'mock_paris_comptoir', country: 'FR', name: 'Le Comptoir du Relais', address: "9 Carrefour de l'Odéon, 75006 Paris", category: 'מסעדה', location: { lat: 48.8515, lng: 2.3401 }, description: 'Classic French bistro in Saint-Germain' },
+  // ── Italy — Rome ──────────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_rome_colosseum', country: 'IT', name: 'Colosseum', nameHe: 'הקולוסיאום', address: 'Piazza del Colosseo, 1, 00184 Roma RM', category: 'אטרקציה', location: { lat: 41.8902, lng: 12.4922 }, website: 'https://www.parcocolosseo.it' },
+  { providerPlaceId: 'mock_rome_vatican', country: 'IT', name: 'Vatican Museums', nameHe: 'מוזיאוני הוותיקן', address: 'Viale Vaticano, 00165 Roma RM', category: 'מוזיאון', location: { lat: 41.9065, lng: 12.4534 } },
+  { providerPlaceId: 'mock_rome_da_enzo', country: 'IT', name: 'Da Enzo al 29', address: 'Via dei Vascellari, 29, 00153 Roma RM', category: 'מסעדה', location: { lat: 41.8879, lng: 12.4703 }, description: 'Trattoria in Trastevere neighborhood' },
+  // ── Spain — Barcelona ─────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_bcn_sagrada', country: 'ES', name: 'Sagrada Família', nameHe: 'סגרדה פמיליה', address: 'C/ de Mallorca, 401, 08013 Barcelona', category: 'אטרקציה', location: { lat: 41.4036, lng: 2.1744 }, website: 'https://sagradafamilia.org' },
+  { providerPlaceId: 'mock_bcn_boqueria', country: 'ES', name: 'La Boqueria Market', nameHe: 'שוק לה בוקריה', address: 'La Rambla, 91, 08001 Barcelona', category: 'שוק', location: { lat: 41.3817, lng: 2.1718 }, description: 'Famous public market on La Rambla' },
+  // ── Netherlands — Amsterdam ───────────────────────────────────────────────
+  { providerPlaceId: 'mock_ams_rijks', country: 'NL', name: 'Rijksmuseum', nameHe: 'ריקסמוזיאום', address: 'Museumstraat 1, 1071 XX Amsterdam', category: 'מוזיאון', location: { lat: 52.3600, lng: 4.8852 }, website: 'https://www.rijksmuseum.nl' },
+  { providerPlaceId: 'mock_ams_vondelpark', country: 'NL', name: 'Vondelpark', nameHe: 'פארק פונדל', address: 'Vondelpark, 1071 Amsterdam', category: 'פארק', location: { lat: 52.3579, lng: 4.8687 }, description: "Amsterdam's largest and most famous park" },
+  // ── Greece — Athens ───────────────────────────────────────────────────────
+  { providerPlaceId: 'mock_ath_acropolis', country: 'GR', name: 'Acropolis of Athens', nameHe: 'האקרופוליס של אתונה', address: 'Acropolis, Athens 105 58, Greece', category: 'אטרקציה', location: { lat: 37.9715, lng: 23.7267 }, website: 'https://www.theacropolismuseum.gr' },
+  { providerPlaceId: 'mock_ath_monastiraki', country: 'GR', name: 'Monastiraki Flea Market', nameHe: 'שוק מונסטירקי', address: 'Platia Monastirakiou, Athina 105 55', category: 'שוק', location: { lat: 37.9762, lng: 23.7243 } },
 ];
 
-function mockSearch(query: string): MockPlace[] {
+/**
+ * Extract a 2-letter country code from a free-text destination string.
+ * Returns null when the destination is ambiguous or unknown.
+ */
+function guessCountry(destination: string): string | null {
+  const d = destination.toLowerCase();
+  if (/poland|פולין|krak[oó]w|warsaw|warszawa|zakopane|gdańsk|gdansk|wrocław|wroclaw|wieliczka|auschwitz|o[sś]wi[eę]cim|zator|energylandia|tatry|tatra|chocho|bania|białka|bialka/.test(d)) return 'PL';
+  if (/france|צרפת|paris|פריז|lyon|nice|marseille/.test(d)) return 'FR';
+  if (/italy|italia|איטליה|rome|roma|רומא|milan|florence|venice|firenze/.test(d)) return 'IT';
+  if (/spain|españa|ספרד|barcelona|ברצלונה|madrid|מדריד|seville|sevilla/.test(d)) return 'ES';
+  if (/netherlands|holland|הולנד|amsterdam|אמסטרדם/.test(d)) return 'NL';
+  if (/greece|grecia|יוון|athens|athina|אתונה/.test(d)) return 'GR';
+  if (/israel|ישראל|tel.?aviv|תל.?אביב|jerusalem|ירושלים|haifa|חיפה/.test(d)) return 'IL';
+  return null;
+}
+
+function mockSearch(query: string, countryCode: string | null): MockPlace[] {
   const q = query.toLowerCase().trim();
   if (!q) return [];
-  return MOCK_PLACES.filter(p =>
-    p.name.toLowerCase().includes(q) ||
-    (p.nameHe && p.nameHe.includes(q)) ||
-    p.address.toLowerCase().includes(q) ||
-    p.category.includes(q) ||
-    (p.description && p.description.toLowerCase().includes(q))
-  ).slice(0, 3);
+
+  // Score each place: higher = better match
+  const scored: Array<{ place: MockPlace; score: number }> = [];
+
+  for (const p of MOCK_PLACES) {
+    // Skip places from other countries when country is known
+    if (countryCode && p.country !== countryCode) continue;
+
+    let score = 0;
+    const nameLow = p.name.toLowerCase();
+    const nameHeLow = (p.nameHe || '').toLowerCase();
+    const descLow  = (p.description || '').toLowerCase();
+
+    if (nameLow === q || nameHeLow === q)               score += 100; // exact match
+    else if (nameLow.startsWith(q) || nameHeLow.startsWith(q)) score += 60;
+    else if (nameLow.includes(q) || nameHeLow.includes(q))     score += 40;
+    else if (p.address.toLowerCase().includes(q))               score += 20;
+    else if (p.category.includes(q))                            score += 10;
+    else if (descLow.includes(q))                               score += 5;
+
+    if (score > 0) scored.push({ place: p, score });
+  }
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(s => s.place);
 }
 
 function getMockById(id: string): MockPlace | undefined {
@@ -276,6 +327,7 @@ async function verifyTripAccess(
     ownerId?: string;
     participantUids?: string[];
     participants?: Array<{ uid: string; role: string }>;
+    destination?: string;
   };
   const isOwner = td.ownerId === uid;
   const participant = (td.participants ?? []).find(p => p.uid === uid);
@@ -300,13 +352,15 @@ export const searchPlaces = onCall(
   { maxInstances: 10, timeoutSeconds: 10, cors: PLACES_CORS },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
-    const { tripId, query, city } = request.data as { tripId: string; query?: string; city?: string };
+    const { tripId, query } = request.data as { tripId: string; query?: string; city?: string };
     if (!tripId || !query?.trim()) throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
 
-    await verifyTripAccess(request.auth.uid, tripId);
+    const trip = await verifyTripAccess(request.auth.uid, tripId);
 
-    const searchTerm = [query.trim(), city?.trim()].filter(Boolean).join(' ');
-    const results = mockSearch(searchTerm);
+    // Infer country from trip destination so results are scoped to the right country
+    const countryCode = guessCountry((trip.destination as string | undefined) || '');
+    // Use query alone for text matching — city is used only for future geo-filtering
+    const results = mockSearch(query.trim(), countryCode);
 
     return {
       requestId: String(Date.now()),

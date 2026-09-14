@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler, TripParticipant } from '../types';
 import { generateId } from '../storage';
@@ -78,14 +78,15 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   const [newStay,       setNewStay]       = useState<Partial<Stay>>(emptyStay());
 
   // Per-card share state
-  const [openShareIdx, setOpenShareIdx] = useState<number | null>(null);
-  const [shareEmail,   setShareEmail]   = useState('');
-  const [shareRole,    setShareRole]    = useState<'editor' | 'viewer'>('editor');
-  const [shareLoading, setShareLoading] = useState(false);
-  const [shareError,      setShareError]      = useState('');
-  const [shareSuccess,    setShareSuccess]    = useState('');
-  const [copiedAppLink,   setCopiedAppLink]   = useState(false);
-  const shareSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [openShareIdx,  setOpenShareIdx]  = useState<number | null>(null);
+  const [shareEmail,    setShareEmail]    = useState('');
+  const [shareRole,     setShareRole]     = useState<'editor' | 'viewer'>('editor');
+  const [shareLoading,  setShareLoading]  = useState(false);
+  const [shareError,    setShareError]    = useState('');
+  const [shareSuccess,  setShareSuccess]  = useState('');
+  const [shareSentOnce, setShareSentOnce] = useState(false); // true after first successful send
+  const [copiedAppLink, setCopiedAppLink] = useState(false);
+
 
   const isOwner      = auth.currentUser?.uid === trip.ownerId;
   const participants: TripParticipant[] = trip.participants ?? [];
@@ -161,6 +162,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setShareRole('editor');
     setShareError('');
     setShareSuccess('');
+    setShareSentOnce(false);
   }
 
   async function handleShareForCard(travelerIdx: number) {
@@ -175,32 +177,26 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
         if (!travelersList[travelerIdx]?.email) {
           updateTraveler(travelerIdx, 'email', data.email);
         }
-        setShareSuccess('✉️ הזמנה נשמרה! כשיתחברו לאפליקציה, הטיול יופיע אוטומטית');
-        if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
-        shareSuccessTimer.current = setTimeout(() => {
-          setOpenShareIdx(null);
-          setShareSuccess('');
-        }, 3500);
+        setShareSuccess('📨 הזמנה נשמרה — הטיול יופיע כשיתחברו לאפליקציה');
+        setShareSentOnce(true);
       } else {
         // User already registered — add as participant immediately
         const newP: TripParticipant = {
           uid: data.uid!, email: data.email, displayName: data.displayName!, role: shareRole,
         };
         const existing = participants.filter(p => p.uid !== data.uid);
+        // BUG FIX: spread form.travelersList so unsaved edits on other cards aren't lost
         onChange({
           ...trip,
+          travelersList:   form.travelersList,
           participants:    [...existing, newP],
           participantUids: [...new Set([...(trip.participantUids ?? []), data.uid!])],
         });
         if (!travelersList[travelerIdx]?.email) {
           updateTraveler(travelerIdx, 'email', data.email);
         }
-        setShareSuccess('✓ ' + (data.displayName || data.email));
-        if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
-        shareSuccessTimer.current = setTimeout(() => {
-          setOpenShareIdx(null);
-          setShareSuccess('');
-        }, 1800);
+        setShareSuccess('✅ שותף בהצלחה');
+        setShareSentOnce(true);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -215,8 +211,10 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setShareLoading(true); setShareError('');
     try {
       await callRemove(trip.id, uid);
+      // BUG FIX: include form.travelersList so unsaved edits on other cards aren't overwritten
       onChange({
         ...trip,
+        travelersList:   form.travelersList,
         participants:    participants.filter(p => p.uid !== uid),
         participantUids: (trip.participantUids ?? []).filter(id => id !== uid),
       });
@@ -449,21 +447,23 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                       : <span>{ini}</span>}
                   </div>
 
-                  {/* 2nd → type select (next to avatar on its left) */}
+                  {/* 2nd → type select — disabled in Design 3 (locked state) */}
                   <select
                     className="trv-type-select"
                     value={t.type || 'adult'}
+                    disabled={isOpen && !!shareSuccess}
                     onChange={e => updateTravelerType(i, e.target.value as 'adult' | 'child')}
                   >
                     <option value="adult">מבוגר</option>
                     <option value="child">ילד</option>
                   </select>
 
-                  {/* 3rd → name input (flex-1, fills remaining space) */}
+                  {/* 3rd → name input — disabled in Design 3 (locked state) */}
                   <input
                     className="trv-name-input"
                     placeholder={`מטייל ${i + 1}`}
                     value={t.name}
+                    disabled={isOpen && !!shareSuccess}
                     onChange={e => updateTraveler(i, 'name', e.target.value)}
                   />
 
@@ -482,7 +482,13 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                     </div>
                   )}
 
-                  {/* Action: admin badge / shared indicator / share button */}
+                  {/* Action:
+                      Design 1 (default)  → share button (dark)
+                      Design 2 (open)     → share button (muted, --open)
+                      Design 3 (locked)   → "שותף בהצלחה ✓" green text
+                      participant exists  → ✓ + remove button
+                      admin              → admin badge
+                  */}
                   {adminCard ? (
                     <span className="trv-admin-badge">אדמין</span>
                   ) : participant ? (
@@ -497,7 +503,16 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                         >✕</button>
                       )}
                     </div>
+                  ) : isOpen && shareSuccess ? (
+                    /* Design 3 — success text replaces share button in top row */
+                    <div className="trv-share-success-inline">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span>{shareSuccess.replace(/^[📨✅]\s*/, '')}</span>
+                    </div>
                   ) : (
+                    /* Design 1 / Design 2 — share button (muted when panel open) */
                     <button
                       className={`trv-share-btn${isOpen ? ' trv-share-btn--open' : ''}`}
                       onClick={() => isOpen ? setOpenShareIdx(null) : openShare(i, t)}
@@ -513,12 +528,37 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                 {isOpen && (
                   <div className="trv-share-panel">
                     {shareSuccess ? (
-                      <p className="trv-share-success">{shareSuccess}</p>
-                    ) : (
+                      /* ── Design 3: LOCKED VIEW — success shown in top row, inputs disabled ── */
                       <div className="trv-share-row">
-                        {/* RTL order: email (→ appears RIGHT), role (middle), button (→ appears LEFT) */}
-
-                        {/* Email input — first in DOM → appears RIGHT in RTL */}
+                        {/* Email — disabled (gray per Figma Design 3) */}
+                        <input
+                          className="trv-name-input"
+                          type="email"
+                          value={shareEmail}
+                          disabled
+                          dir="ltr"
+                        />
+                        {/* Role — disabled */}
+                        <select className="trv-type-select" value={shareRole} disabled dir="ltr">
+                          <option value="editor">editor</option>
+                          <option value="viewer">viewer</option>
+                        </select>
+                        {/* Pencil edit button (Design 3: dark 42×42 icon button) */}
+                        <button
+                          className="trv-share-edit-btn"
+                          onClick={() => { setShareSuccess(''); setShareError(''); }}
+                          title="ערוך פרטי שיתוף"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      /* ── EDIT VIEW: before send, or after clicking "ערוך" ── */
+                      <div className="trv-share-row">
+                        {/* Email input */}
                         <input
                           className="trv-name-input"
                           type="email"
@@ -529,8 +569,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                           onKeyDown={e => e.key === 'Enter' && handleShareForCard(i)}
                           autoFocus
                         />
-
-                        {/* Role select — middle */}
+                        {/* Role select */}
                         <select
                           className="trv-type-select"
                           value={shareRole}
@@ -540,14 +579,13 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                           <option value="editor">editor</option>
                           <option value="viewer">viewer</option>
                         </select>
-
-                        {/* Send button — last in DOM → appears LEFT in RTL */}
+                        {/* Send / Resend button */}
                         <button
                           className="trv-share-submit"
                           onClick={() => handleShareForCard(i)}
                           disabled={shareLoading || !shareEmail.trim()}
                         >
-                          {shareLoading ? '...' : 'שלח שיתוף'}
+                          {shareLoading ? '...' : shareSentOnce ? '↩ שלח שוב' : 'שלח שיתוף'}
                         </button>
                       </div>
                     )}

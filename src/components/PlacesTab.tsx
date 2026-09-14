@@ -223,6 +223,34 @@ function pickBest(existing: unknown, aiVal: unknown): unknown {
   return aiVal; // numbers, booleans — prefer AI
 }
 
+// ── Add/Search sheet types ───────────────────────────────────────
+type SheetStep = 'search' | 'results' | 'details';
+type SheetMode = 'manual' | 'search';
+
+interface PlaceDraft {
+  nameHe:     string;
+  nameEn:     string;
+  city:       string;
+  type:       PlaceType;
+  address:    string;
+  description:string;
+  website:    string;
+  priceAdult: string;
+  priceChild: string;
+  travelTime: string;
+  duration:   string;
+  imageUrl:   string;
+  must:       boolean;
+  providerPlaceId?: string;
+}
+
+const emptyDraft = (): PlaceDraft => ({
+  nameHe: '', nameEn: '', city: '', type: 'אטרקציה',
+  address: '', description: '', website: '',
+  priceAdult: '', priceChild: '', travelTime: '', duration: '',
+  imageUrl: '', must: false,
+});
+
 /* ── Main component ────────────────────────────────────────────── */
 export default function PlacesTab({ trip, onChange }: Props) {
   const [modalOpen,     setModalOpen]     = useState(false);
@@ -239,18 +267,21 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [calPickerId,   setCalPickerId]   = useState<string | null>(null);  // date-picker open for this place
   const [viewPlace,     setViewPlace]     = useState<Place | null>(null);   // read-only detail view
 
-  // ── Search Sheet state ───────────────────────────────────────────
-  type SearchState = 'idle' | 'searching' | 'selecting' | 'loadingDetails' | 'editing' | 'saving';
-  const [searchSheetOpen,  setSearchSheetOpen]  = useState(false);
-  const [searchState,      setSearchState]      = useState<SearchState>('idle');
-  const [searchQuery,      setSearchQuery]      = useState('');
-  const [searchCity,       setSearchCity]       = useState('');
-  const [searchResults,    setSearchResults]    = useState<PlaceSearchResult[]>([]);
-  const [searchError,      setSearchError]      = useState('');
-  const [placeDetails,     setPlaceDetails]     = useState<PlaceDetailsResult | null>(null);
-  const [editForm,         setEditForm]         = useState<Partial<Place>>({});
-  const [selectedImgIdx,   setSelectedImgIdx]   = useState(0);
-  const latestRequestId = useRef('');
+  // ── Add / Search Sheet state ─────────────────────────────────────
+  const [sheetOpen,       setSheetOpen]       = useState(false);
+  const [sheetStep,       setSheetStep]       = useState<SheetStep>('search');
+  const [sheetMode,       setSheetMode]       = useState<SheetMode>('manual');
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [searchResults,   setSearchResults]   = useState<PlaceSearchResult[]>([]);
+  const [searchError,     setSearchError]     = useState('');
+  const [serviceError,    setServiceError]    = useState(false);
+  const [draft,           setDraft]           = useState<PlaceDraft>(emptyDraft());
+  const [detailsLoading,  setDetailsLoading]  = useState(false);
+  const [sheetSaving,     setSheetSaving]     = useState(false);
+  const [sheetSearching,  setSheetSearching]  = useState(false);
+  const dirtyFieldsRef  = useRef<Set<string>>(new Set());
+  const latestSearchRef = useRef('');
+  const latestDetailsRef= useRef('');
 
   // Wikipedia image cache (session-only)
   const [imageCache, setImageCache] = useState<Record<string, string>>({});
@@ -456,92 +487,217 @@ export default function PlacesTab({ trip, onChange }: Props) {
     setCalPickerId(null);
   }
 
-  /* ── Search Sheet handlers ─────────────────────────────────── */
-  function openSearchSheet() {
-    setSearchSheetOpen(true);
-    setSearchState('idle');
+  /* ── Add/Search Sheet handlers ──────────────────────────────── */
+
+  /** Open sheet at search step */
+  function openSheet() {
+    setSheetOpen(true);
+    setSheetStep('search');
+    setSheetMode('search');
     setSearchQuery('');
-    setSearchCity('');
     setSearchResults([]);
     setSearchError('');
-    setPlaceDetails(null);
+    setServiceError(false);
+    setDraft(emptyDraft());
+    dirtyFieldsRef.current = new Set();
   }
 
-  function closeSearchSheet() {
-    setSearchSheetOpen(false);
-    setSearchState('idle');
+  /** Open sheet directly at empty details form (manual mode) */
+  function openSheetManual() {
+    setSheetOpen(true);
+    setSheetStep('details');
+    setSheetMode('manual');
+    setDraft(emptyDraft());
+    dirtyFieldsRef.current = new Set();
     setSearchError('');
-    latestRequestId.current = '';
+    setDetailsLoading(false);
+  }
+
+  function closeSheet() {
+    const hasEdits = dirtyFieldsRef.current.size > 0 &&
+      (draft.nameHe.trim() || draft.nameEn.trim() || draft.description.trim());
+    if (hasEdits) {
+      if (!window.confirm('יש שינויים שלא נשמרו. לסגור?')) return;
+    }
+    setSheetOpen(false);
+    latestSearchRef.current  = '';
+    latestDetailsRef.current = '';
+  }
+
+  /** Mark a draft field as user-edited and update value */
+  function updateDraft<K extends keyof PlaceDraft>(field: K, value: PlaceDraft[K]) {
+    setDraft(d => ({ ...d, [field]: value }));
+    dirtyFieldsRef.current = new Set([...dirtyFieldsRef.current, field as string]);
+  }
+
+  /** Switch to manual mode from inside the sheet */
+  function switchToManual() {
+    setDraft(emptyDraft());
+    dirtyFieldsRef.current = new Set();
+    setSheetMode('manual');
+    setSheetStep('details');
+    setDetailsLoading(false);
+    setSearchError('');
   }
 
   async function handleSearch() {
     const q = searchQuery.trim();
     if (!q) return;
-    setSearchState('searching');
+    setSheetSearching(true);
     setSearchError('');
+    setServiceError(false);
+    const reqId = String(Date.now());
+    latestSearchRef.current = reqId;
     try {
-      const { results } = await searchPlaces(trip.id, q, searchCity.trim() || undefined);
+      const { results } = await searchPlaces(trip.id, q);
+      if (latestSearchRef.current !== reqId) return;
       setSearchResults(results);
-      setSearchState('selecting');
+      if (results.length === 1) {
+        // Single result → skip results screen, go straight to details
+        await handleSelectResult(results[0], reqId);
+      } else {
+        setSheetStep('results');
+      }
     } catch {
-      setSearchState('idle');
-      setSearchError('שירות אינו זמין כרגע — נסי שוב או הוסיפי ידנית');
+      if (latestSearchRef.current !== reqId) return;
+      setServiceError(true);
+      setSheetStep('results');
+    } finally {
+      if (latestSearchRef.current === reqId) setSheetSearching(false);
     }
   }
 
-  async function handleSelectResult(result: PlaceSearchResult) {
-    setSearchState('loadingDetails');
+  async function handleSelectResult(result: PlaceSearchResult, reqIdOverride?: string) {
+    dirtyFieldsRef.current = new Set();
+    const reqId = reqIdOverride ?? String(Date.now());
+    latestDetailsRef.current = reqId;
+
+    const cityGuess = result.address.split(',').slice(-2, -1)[0]?.trim() || '';
+    setDraft({
+      ...emptyDraft(),
+      nameEn:  result.name,
+      city:    cityGuess,
+      type:    TYPES.includes(result.category as PlaceType) ? result.category as PlaceType : 'אטרקציה',
+      address: result.address,
+      providerPlaceId: result.providerPlaceId,
+    });
+    setSheetMode('search');
+    setSheetStep('details');
+    setDetailsLoading(true);
     setSearchError('');
-    const reqId = String(Date.now());
-    latestRequestId.current = reqId;
+
     try {
       const details = await getPlaceDetails(trip.id, result.providerPlaceId);
-      if (latestRequestId.current !== reqId) return; // stale response — ignore
-      setPlaceDetails(details);
-      setEditForm({
-        nameHe:      details.nameHe,
-        nameEn:      details.name,
-        type:        ((['אטרקציה','מסעדה','קפה','מוזיאון','שוק','פארק','שכונה','אחר'] as const).includes(details.category as PlaceType)
-                       ? details.category : 'אחר') as PlaceType,
-        description: details.description,
-        city:        '',
-        must:        false,
-        visited:     false,
-        booked:      false,
+      if (latestDetailsRef.current !== reqId) return;
+      setDraft(prev => {
+        const dirty = dirtyFieldsRef.current;
+        return {
+          ...prev,
+          nameHe:      dirty.has('nameHe')      ? prev.nameHe      : (details.nameHe    || prev.nameHe),
+          nameEn:      dirty.has('nameEn')       ? prev.nameEn      : (details.name      || prev.nameEn),
+          address:     dirty.has('address')      ? prev.address     : (details.address   || prev.address),
+          description: dirty.has('description')  ? prev.description : (details.description || prev.description),
+          website:     dirty.has('website')      ? prev.website     : (details.website   || prev.website || ''),
+          type:        dirty.has('type')         ? prev.type        : (
+            TYPES.includes(details.category as PlaceType) ? details.category as PlaceType : prev.type
+          ),
+          imageUrl:    dirty.has('imageUrl')     ? prev.imageUrl    : (details.imageUrls?.[0] || prev.imageUrl),
+          providerPlaceId: details.providerPlaceId,
+        };
       });
-      setSelectedImgIdx(0);
-      setSearchState('editing');
     } catch (err) {
-      if (latestRequestId.current !== reqId) return;
+      if (latestDetailsRef.current !== reqId) return;
       const msg = (err as { message?: string }).message || '';
-      setSearchState('selecting');
-      setSearchError(msg.includes('מגבלה') ? msg : 'לא הצלחתי לטעון פרטי מקום — נסי שוב');
+      setSearchError(msg.includes('מגבלה') ? msg : 'לא הצלחתי לטעון פרטים — ניתן לערוך ידנית');
+    } finally {
+      if (latestDetailsRef.current === reqId) setDetailsLoading(false);
     }
   }
 
-  async function handleSaveFromSearch() {
-    if (!placeDetails || !editForm.nameHe?.trim()) return;
-    setSearchState('saving');
+  /** Refresh: fill only empty fields, never overwrite user edits */
+  async function handleRefill() {
+    const term = (draft.nameEn || draft.nameHe).trim();
+    if (!term) { setSearchError('הזיני שם כדי להשלים פרטים'); return; }
+    setDetailsLoading(true);
+    setSearchError('');
+    const reqId = String(Date.now());
+    latestDetailsRef.current = reqId;
+    try {
+      const result = await enrichPlace(term, trip.destination, draft.nameHe || undefined);
+      if (latestDetailsRef.current !== reqId) return;
+      const dirty = dirtyFieldsRef.current;
+      setDraft(prev => ({
+        ...prev,
+        nameHe:      (dirty.has('nameHe')      || prev.nameHe)      ? prev.nameHe      : (result.nameHe    || ''),
+        nameEn:      (dirty.has('nameEn')       || prev.nameEn)      ? prev.nameEn      : (result.nameEn    || ''),
+        city:        (dirty.has('city')         || prev.city)        ? prev.city        : (result.city      || ''),
+        description: (dirty.has('description')  || prev.description) ? prev.description : (result.description || ''),
+        website:     (dirty.has('website')      || prev.website)     ? prev.website     : (result.website   || ''),
+        type:        dirty.has('type')                               ? prev.type        :
+          (result.type && TYPES.includes(result.type) ? result.type : prev.type),
+        travelTime:  (dirty.has('travelTime')   || prev.travelTime)  ? prev.travelTime  : (result.travelTime || ''),
+        priceAdult:  (dirty.has('priceAdult')   || prev.priceAdult)  ? prev.priceAdult  :
+          (result.priceAdult != null ? String(result.priceAdult) : ''),
+        priceChild:  (dirty.has('priceChild')   || prev.priceChild)  ? prev.priceChild  :
+          (result.priceChild != null ? String(result.priceChild) : ''),
+      }));
+    } catch {
+      if (latestDetailsRef.current !== reqId) return;
+      setSearchError('לא הצלחתי להשלים פרטים — ניתן לערוך ידנית');
+    } finally {
+      if (latestDetailsRef.current === reqId) setDetailsLoading(false);
+    }
+  }
+
+  async function handleSheetSave() {
+    const nameHe = draft.nameHe.trim();
+    const nameEn = draft.nameEn.trim();
+    if (!nameHe && !nameEn) { setSearchError('נדרש לפחות שם אחד'); return; }
+    setSheetSaving(true);
     setSearchError('');
     try {
-      await savePlaceIdea(trip.id, {
-        providerPlaceId: placeDetails.providerPlaceId,
-        nameHe:          editForm.nameHe || placeDetails.nameHe,
-        nameEn:          editForm.nameEn || placeDetails.name,
-        address:         placeDetails.address,
-        city:            editForm.city?.trim() || '',
-        category:        editForm.type || placeDetails.category,
-        description:     editForm.description || placeDetails.description,
-        website:         placeDetails.website ?? undefined,
-        imageUrl:        placeDetails.imageUrls[selectedImgIdx] || undefined,
-        must:            !!editForm.must,
-      });
-      closeSearchSheet();
-      // Trip will update automatically via Firestore real-time listener in App.tsx
+      if (sheetMode === 'search' && draft.providerPlaceId) {
+        await savePlaceIdea(trip.id, {
+          providerPlaceId: draft.providerPlaceId,
+          nameHe:      nameHe || nameEn,
+          nameEn:      nameEn || undefined,
+          address:     draft.address    || undefined,
+          city:        draft.city ? normalizeCity(draft.city) : undefined,
+          category:    draft.type,
+          description: draft.description || undefined,
+          website:     draft.website    || undefined,
+          imageUrl:    draft.imageUrl   || undefined,
+          must:        draft.must,
+        });
+      } else {
+        // Manual add — save directly to trip
+        const newPlace: Place = {
+          id:          generateId(),
+          nameHe:      nameHe || nameEn,
+          nameEn:      nameEn || undefined,
+          city:        draft.city ? normalizeCity(draft.city) : undefined,
+          type:        draft.type,
+          must:        draft.must,
+          visited:     false,
+          booked:      false,
+          address:     draft.address      || undefined,
+          description: draft.description  || undefined,
+          website:     draft.website      || undefined,
+          travelTime:  draft.travelTime   || undefined,
+          duration:    draft.duration     ? Number(draft.duration)    : undefined,
+          priceAdult:  draft.priceAdult   ? Number(draft.priceAdult)  : undefined,
+          priceChild:  draft.priceChild   ? Number(draft.priceChild)  : undefined,
+          imageUrl:    draft.imageUrl     || undefined,
+        };
+        onChange({ ...trip, places: [...trip.places, newPlace] });
+      }
+      dirtyFieldsRef.current = new Set();
+      setSheetOpen(false);
     } catch (err) {
       const msg = (err as { message?: string }).message || '';
-      setSearchState('editing');
-      setSearchError(msg.includes('כבר קיים') ? '⚠️ המקום כבר קיים בבנק' : 'שגיאה בשמירה — נסי שוב');
+      setSearchError(msg.includes('כבר קיים') ? '⚠️ המקום כבר קיים בבנק הרעיונות' : 'שגיאה בשמירה — נסי שוב');
+    } finally {
+      setSheetSaving(false);
     }
   }
 
@@ -574,8 +730,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
           </div>
         </div>
         <div className="toolbar-left">
-          <button className="btn-secondary btn-sm" onClick={openSearchSheet}>🔍 חפש מקום</button>
-          <button className="btn-primary btn-sm" onClick={openAdd}>+ הוסף ידנית</button>
+          <button className="btn-secondary btn-sm" onClick={openSheet}>🔍 חפש מקום</button>
+          <button className="btn-primary btn-sm" onClick={openSheetManual}>+ הוסף ידנית</button>
         </div>
       </div>
 
@@ -838,27 +994,20 @@ export default function PlacesTab({ trip, onChange }: Props) {
         );
       })()}
 
-      {/* ── SEARCH SHEET ── */}
-      {searchSheetOpen && (
-        <div className="exp-overlay" onClick={e => { if (e.target === e.currentTarget) closeSearchSheet(); }}>
-          <div className="exp-sheet places-search-sheet">
+      {/* ── ADD / SEARCH SHEET ── */}
+      {sheetOpen && (
+        <div className="exp-overlay" onClick={e => { if (e.target === e.currentTarget) closeSheet(); }}>
+          <div className="exp-sheet pls-sheet">
 
-            {/* Header */}
-            <div className="exp-sheet-hdr">
-              <button className="exp-sheet-close" onClick={closeSearchSheet}>✕</button>
-              <span className="exp-sheet-title">
-                {searchState === 'editing' || searchState === 'saving' ? 'אישור ושמירה' :
-                 searchState === 'selecting'                           ? `${searchResults.length} תוצאות` :
-                 searchState === 'loadingDetails'                     ? 'שולף פרטים...' :
-                 'חיפוש מקום'}
-              </span>
-              <div />
-            </div>
-
-            {/* ── IDLE / SEARCHING ── */}
-            {(searchState === 'idle' || searchState === 'searching') && (
-              <div className="places-search-form">
-                <label className="places-label">שם המקום</label>
+            {/* ══ STEP 1: SEARCH ══ */}
+            {sheetStep === 'search' && (<>
+              <div className="exp-sheet-hdr">
+                <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+                <span className="exp-sheet-title">רעיון חדש</span>
+                <div />
+              </div>
+              <div className="pls-search-wrap">
+                <p className="pls-search-hint">הכנס שם של מקום</p>
                 <input
                   className="exp-field-inp"
                   placeholder="מסעדה, אטרקציה, מוזיאון..."
@@ -867,150 +1016,270 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                   autoFocus
                 />
-                <label className="places-label" style={{ marginTop: 10 }}>עיר (אופציונלי)</label>
-                <input
-                  className="exp-field-inp"
-                  placeholder={trip.destination || 'עיר'}
-                  value={searchCity}
-                  onChange={e => setSearchCity(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                />
-                {searchError && <div className="places-search-error">{searchError}</div>}
-                <div className="places-search-actions">
+                {searchError && <div className="pls-error">{searchError}</div>}
+                <div className="pls-search-btns">
                   <button
-                    className="btn-primary"
+                    className="pls-btn-search"
                     onClick={handleSearch}
-                    disabled={searchState === 'searching' || !searchQuery.trim()}
+                    disabled={sheetSearching || !searchQuery.trim()}
                   >
-                    {searchState === 'searching' ? <><span className="spin">⟳</span> מחפש...</> : '🔍 חפש'}
+                    {sheetSearching ? <><span className="spin">⟳</span> מחפש...</> : 'חפש'}
                   </button>
-                  <button className="btn-secondary" onClick={() => { closeSearchSheet(); openAdd(); }}>
-                    + הוסף ידנית
+                  <button className="pls-btn-manual" onClick={switchToManual}>
+                    הוסף ידנית
                   </button>
                 </div>
               </div>
-            )}
+            </>)}
 
-            {/* ── SELECTING ── */}
-            {searchState === 'selecting' && (
-              <div className="places-results-list">
-                {searchResults.length === 0 ? (
-                  <div className="places-no-results">
-                    <div className="places-no-results-icon">🔍</div>
-                    <p>לא נמצאו תוצאות עבור "{searchQuery}"</p>
-                    <p className="places-no-results-hint">נסי שם אחר, או הוסיפי ידנית</p>
+            {/* ══ STEP 2: RESULTS ══ */}
+            {sheetStep === 'results' && (<>
+              <div className="exp-sheet-hdr">
+                <button
+                  className="exp-sheet-close pls-back-icon"
+                  onClick={() => { setSheetStep('search'); setSearchError(''); setServiceError(false); }}
+                >‹</button>
+                <span className="exp-sheet-title">
+                  {serviceError ? 'שגיאה' : `${searchResults.length} תוצאות`}
+                </span>
+                <div />
+              </div>
+              <div className="pls-results-wrap">
+                {serviceError ? (
+                  <div className="pls-no-results">
+                    <div className="pls-no-results-icon">⚠️</div>
+                    <p>השירות אינו זמין כרגע</p>
+                    <div className="pls-no-results-btns">
+                      <button className="pls-btn-outline" onClick={() => { setSheetStep('search'); setServiceError(false); }}>נסי שוב</button>
+                      <button className="pls-btn-outline" onClick={switchToManual}>+ הוסף ידנית</button>
+                    </div>
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="pls-no-results">
+                    <div className="pls-no-results-icon">🔍</div>
+                    <p>לא נמצאו תוצאות עבור &ldquo;{searchQuery}&rdquo;</p>
+                    <p className="pls-no-results-hint">נסי שם אחר, או הוסיפי ידנית</p>
+                    <div className="pls-no-results-btns">
+                      <button className="pls-btn-outline" onClick={() => { setSheetStep('search'); }}>חיפוש חדש</button>
+                      <button className="pls-btn-outline" onClick={switchToManual}>+ הוסף ידנית</button>
+                    </div>
                   </div>
                 ) : (
                   searchResults.map(r => (
-                    <button key={r.providerPlaceId} className="places-result-card" onClick={() => handleSelectResult(r)}>
-                      <span className="places-result-icon">{TYPE_ICONS[r.category] || '📌'}</span>
-                      <div className="places-result-body">
-                        <div className="places-result-name">{r.name}</div>
-                        <div className="places-result-addr">{r.address}</div>
-                        <span className="places-result-cat">{r.category}</span>
+                    <button key={r.providerPlaceId} className="pls-result-item" onClick={() => handleSelectResult(r)}>
+                      <div className="pls-result-pin" aria-hidden="true">
+                        <svg width="12" height="16" viewBox="0 0 14 18" fill="none">
+                          <path d="M7 0C3.13 0 0 3.13 0 7c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5C5.62 9.5 4.5 8.38 4.5 7S5.62 4.5 7 4.5 9.5 5.62 9.5 7 8.38 9.5 7 9.5z" fill="white"/>
+                        </svg>
                       </div>
-                      <span className="places-result-arrow">›</span>
+                      <div className="pls-result-body">
+                        <div className="pls-result-name">{r.name}</div>
+                        <div className="pls-result-addr">{r.address}</div>
+                        <span className="pls-result-badge">{r.category}</span>
+                      </div>
+                      <span className="pls-chevron">‹</span>
                     </button>
                   ))
                 )}
-                <div className="places-results-footer">
-                  <button className="places-back-btn" onClick={() => setSearchState('idle')}>← חיפוש חדש</button>
-                  <button className="places-back-btn" onClick={() => { closeSearchSheet(); openAdd(); }}>+ הוסף ידנית</button>
-                </div>
+                {!serviceError && searchResults.length > 0 && (
+                  <div className="pls-results-footer">
+                    <button className="pls-new-search-btn" onClick={() => { setSheetStep('search'); }}>חיפוש חדש</button>
+                  </div>
+                )}
               </div>
-            )}
+            </>)}
 
-            {/* ── LOADING DETAILS ── */}
-            {searchState === 'loadingDetails' && (
-              <div className="places-loading-state">
-                <span className="spin" style={{ fontSize: 28 }}>⟳</span>
-                <p>שולף פרטים ומתרגם...</p>
+            {/* ══ STEP 3: DETAILS FORM ══ */}
+            {sheetStep === 'details' && (<>
+              <div className="exp-sheet-hdr">
+                <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+                <span className="exp-sheet-title">רעיון חדש</span>
+                <div />
               </div>
-            )}
+              <div className="pls-details-scroll">
 
-            {/* ── EDITING / SAVING ── */}
-            {(searchState === 'editing' || searchState === 'saving') && placeDetails && (
-              <div className="places-edit-wrap">
-                {/* Image carousel */}
-                {placeDetails.imageUrls.length > 0 ? (
-                  <div className="places-img-carousel">
+                {/* Hero image */}
+                <div className="pls-img-box">
+                  {draft.imageUrl ? (
                     <img
-                      key={placeDetails.imageUrls[selectedImgIdx]}
-                      src={placeDetails.imageUrls[selectedImgIdx]}
+                      src={draft.imageUrl}
                       alt=""
-                      className="places-preview-img"
-                      onError={e => (e.currentTarget.style.display = 'none')}
+                      className="pls-img"
+                      onError={() => updateDraft('imageUrl', '')}
                     />
-                    {placeDetails.imageUrls.length > 1 && (
-                      <div className="places-img-dots">
-                        {placeDetails.imageUrls.map((_, i) => (
-                          <button
-                            key={i}
-                            className={`places-img-dot ${i === selectedImgIdx ? 'active' : ''}`}
-                            onClick={() => setSelectedImgIdx(i)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="places-img-placeholder-box">
-                    {TYPE_ICONS[placeDetails.category] || '📌'}
-                  </div>
-                )}
-
-                {/* Address (read-only) */}
-                {placeDetails.address && (
-                  <div className="places-address-chip">
-                    <span>📍</span> {placeDetails.address}
-                  </div>
-                )}
-
-                {/* Editable fields */}
-                <div className="exp-sheet-fields">
-                  <div>
-                    <label className="places-label">שם בעברית</label>
-                    <input className="exp-field-inp" value={editForm.nameHe || ''} onChange={e => setEditForm(f => ({ ...f, nameHe: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="places-label">Name</label>
-                    <input className="exp-field-inp" value={editForm.nameEn || ''} onChange={e => setEditForm(f => ({ ...f, nameEn: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="places-label">עיר</label>
-                    <input className="exp-field-inp" value={editForm.city || ''} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} placeholder="עיר (אופציונלי)" />
-                  </div>
-                  <div>
-                    <label className="places-label">קטגוריה</label>
-                    <select className="exp-field-inp" value={editForm.type || placeDetails.category} onChange={e => setEditForm(f => ({ ...f, type: e.target.value as PlaceType }))}>
-                      {TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="places-label">תיאור</label>
-                    <textarea className="exp-field-inp" rows={2} value={editForm.description || ''} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
-                  </div>
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={!!editForm.must} onChange={e => setEditForm(f => ({ ...f, must: e.target.checked }))} />
-                    ⭐ Must
-                  </label>
-                  {searchError && <div className="places-search-error">{searchError}</div>}
+                  ) : (
+                    <div className="pls-img-placeholder">
+                      <span className="pls-img-icon">{TYPE_ICONS[draft.type] || '📌'}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="places-preview-actions">
+                {/* Address row */}
+                {draft.address && (
+                  <div className="pls-addr-row">
+                    <span className="pls-addr-text">{draft.address}</span>
+                    <span className="pls-addr-pin">📍</span>
+                  </div>
+                )}
+
+                {/* Loading indicator */}
+                {detailsLoading && (
+                  <div className="pls-loading-bar">
+                    <span className="spin" style={{ fontSize: 14 }}>⟳</span>
+                    <span>משלים פרטים...</span>
+                  </div>
+                )}
+
+                <div className="pls-fields">
+
+                  {/* Row 1: English name + Hebrew name */}
+                  <div className="pls-field-row">
+                    <div className="pls-field">
+                      <label className="pls-label">Name in English</label>
+                      <input
+                        className="exp-field-inp"
+                        dir="ltr"
+                        value={draft.nameEn}
+                        onChange={e => updateDraft('nameEn', e.target.value)}
+                        placeholder="Place name"
+                      />
+                    </div>
+                    <div className="pls-field">
+                      <label className="pls-label">שם בעברית</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.nameHe}
+                        onChange={e => updateDraft('nameHe', e.target.value)}
+                        placeholder="שם המקום"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Category + City */}
+                  <div className="pls-field-row">
+                    <div className="pls-field">
+                      <label className="pls-label">קטגוריה</label>
+                      <select
+                        className="exp-field-inp"
+                        value={draft.type}
+                        onChange={e => updateDraft('type', e.target.value as PlaceType)}
+                      >
+                        {TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="pls-field">
+                      <label className="pls-label">עיר</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.city}
+                        onChange={e => updateDraft('city', e.target.value)}
+                        placeholder="קרקוב"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Address (full width) */}
+                  <div className="pls-field-full">
+                    <label className="pls-label">כתובת</label>
+                    <input
+                      className="exp-field-inp"
+                      value={draft.address}
+                      onChange={e => updateDraft('address', e.target.value)}
+                      placeholder="עיר (אופציונלי)"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="pls-field-full">
+                    <label className="pls-label">תיאור</label>
+                    <textarea
+                      className="exp-field-inp pls-textarea"
+                      rows={3}
+                      value={draft.description}
+                      onChange={e => updateDraft('description', e.target.value)}
+                    />
+                  </div>
+
+                  {/* Website */}
+                  <div className="pls-field-full">
+                    <label className="pls-label">אתר</label>
+                    <input
+                      className="exp-field-inp"
+                      dir="ltr"
+                      value={draft.website}
+                      onChange={e => updateDraft('website', e.target.value)}
+                      placeholder="https://"
+                      type="url"
+                    />
+                  </div>
+
+                  {/* 4-col row: שעת ביקור, זמן נסיעה, מחיר ילד, מחיר מבוגר */}
+                  <div className="pls-field-row pls-field-row--4">
+                    <div className="pls-field">
+                      <label className="pls-label">שעת ביקור</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.duration}
+                        onChange={e => updateDraft('duration', e.target.value)}
+                        placeholder="שע'"
+                      />
+                    </div>
+                    <div className="pls-field">
+                      <label className="pls-label">זמן נסיעה</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.travelTime}
+                        onChange={e => updateDraft('travelTime', e.target.value)}
+                        placeholder="שע'"
+                      />
+                    </div>
+                    <div className="pls-field">
+                      <label className="pls-label">מחיר לילד</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.priceChild}
+                        onChange={e => updateDraft('priceChild', e.target.value)}
+                        placeholder="₪"
+                        type="number" min="0"
+                      />
+                    </div>
+                    <div className="pls-field">
+                      <label className="pls-label">מחיר למבוגר</label>
+                      <input
+                        className="exp-field-inp"
+                        value={draft.priceAdult}
+                        onChange={e => updateDraft('priceAdult', e.target.value)}
+                        placeholder="₪"
+                        type="number" min="0"
+                      />
+                    </div>
+                  </div>
+
+                  {searchError && <div className="pls-error">{searchError}</div>}
+                </div>
+
+                {/* Save row */}
+                <div className="pls-save-row">
                   <button
-                    className="btn-primary"
-                    onClick={handleSaveFromSearch}
-                    disabled={searchState === 'saving' || !editForm.nameHe?.trim()}
+                    className="pls-btn-save"
+                    onClick={handleSheetSave}
+                    disabled={sheetSaving}
                   >
-                    {searchState === 'saving' ? <><span className="spin">⟳</span> שומר...</> : '✓ שמור בבנק'}
+                    {sheetSaving ? <><span className="spin">⟳</span> שומר...</> : 'שמור בבנק'}
                   </button>
-                  <button className="btn-secondary" onClick={() => { setSearchState('selecting'); setSearchError(''); }}>
-                    ← חזרה לתוצאות
+                  <button
+                    className="pls-btn-refresh"
+                    onClick={handleRefill}
+                    disabled={detailsLoading}
+                    aria-label="השלם פרטים חסרים"
+                    title="השלם פרטים חסרים"
+                  >
+                    {detailsLoading ? <span className="spin">⟳</span> : '↺'}
                   </button>
                 </div>
-              </div>
-            )}
+
+              </div>{/* /pls-details-scroll */}
+            </>)}
 
           </div>
         </div>
