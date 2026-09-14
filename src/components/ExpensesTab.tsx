@@ -480,7 +480,6 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
                   {totalILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="exp-stat-sep" />
               <div className="exp-stat">
                 <span className="exp-stat-label">ממוצע יומי</span>
                 <span className="exp-stat-value">
@@ -489,18 +488,15 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
                 </span>
               </div>
               {isOnTrip && (
-                <>
-                  <div className="exp-stat-sep" />
-                  <div className="exp-stat exp-stat--today">
-                    <span className="exp-stat-label">הוצאות היום</span>
-                    <span className="exp-stat-value">
-                      <span className="exp-stat-cur">₪</span>
-                      {todayILS > 0
-                        ? todayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                        : '—'}
-                    </span>
-                  </div>
-                </>
+                <div className="exp-stat exp-stat--today">
+                  <span className="exp-stat-label">הוצאות היום</span>
+                  <span className="exp-stat-value">
+                    <span className="exp-stat-cur">₪</span>
+                    {todayILS > 0
+                      ? todayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                      : '—'}
+                  </span>
+                </div>
               )}
             </>
           ) : (

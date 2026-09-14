@@ -113,6 +113,7 @@ body {
 /* Tab content — constrained to 1100px, no horizontal padding (components manage their own) */
 .app-main--trip .tab-content {
   max-width: 1100px; margin-left: auto; margin-right: auto;
+  padding-top: 20px;
 }
 
 /* ============================================================
@@ -481,6 +482,27 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
    ============================================================ */
 .filter-chips { display: flex; gap: 6px; }
 .sort-select { width: auto; padding: 6px 12px; font-size: 13px; }
+
+/* Filter chips row (Places tab) */
+.filter-chips-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 16px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-chips-row::-webkit-scrollbar { display: none; }
+.filter-chips-row .chip { white-space: nowrap; font-size: 13px; padding: 5px 12px; }
+.chip-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink-muted); color: var(--surface);
+  border-radius: 99px; font-size: 11px; min-width: 18px; height: 18px;
+  padding: 0 5px; margin-right: 4px;
+}
+.chip-active .chip-count { background: var(--yellow); color: var(--dark); }
+.filter-chips-cities { padding-top: 4px; border-top: 1px solid var(--border); }
+.chip-sm { font-size: 12px; padding: 4px 10px; }
 /* legacy table (keep for old CSS class refs) */
 .places-table-wrap { overflow-x: auto; }
 .type-badge { background: var(--surface3); border-radius: 99px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
@@ -816,10 +838,14 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 /* ── Stats bar ── */
 .exp-stats-bar {
-  display: flex; background: var(--dark); border-radius: var(--radius);
-  margin-bottom: 14px; overflow: hidden;
+  display: flex; gap: 10px;
+  margin-bottom: 14px;
 }
-.exp-stat { flex: 1; display: flex; flex-direction: column; padding: 18px 22px; }
+.exp-stat {
+  flex: 1; display: flex; flex-direction: column; padding: 16px 18px;
+  background: var(--dark); border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,.07);
+}
 /* Clickable stat tile (currency buttons inside stats bar) */
 .exp-stat--btn {
   background: transparent; border: none; cursor: pointer; font-family: inherit;
@@ -2064,17 +2090,25 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .itin-source-btn:hover { border-color: var(--border-mid); background: var(--surface2); }
 
 /* Bank list inside sheet */
-.itin-bank-list { max-height: 50vh; overflow-y: auto; padding: 8px 16px; }
+.itin-bank-cats {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 10px 16px 8px; border-bottom: 1px solid var(--border);
+}
+.itin-bank-list { max-height: 45vh; overflow-y: auto; padding: 8px 16px; }
 .itin-bank-item {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center; gap: 8px;
   padding: 11px 14px; border-radius: 10px; border: 1.5px solid var(--border);
   background: var(--surface); margin-bottom: 6px; cursor: pointer;
   width: 100%; text-align: right; font-family: inherit;
   transition: background .15s;
 }
 .itin-bank-item:hover { background: var(--surface2); }
-.itin-bank-item-name { font-size: 14px; font-weight: 600; color: var(--ink); }
-.itin-bank-item-city { font-size: 12px; color: var(--ink-muted); }
+.itin-bank-item-type {
+  font-size: 11px; color: var(--ink-muted); background: var(--surface2);
+  border-radius: 99px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
+}
+.itin-bank-item-name { font-size: 14px; font-weight: 600; color: var(--ink); flex: 1; }
+.itin-bank-item-city { font-size: 12px; color: var(--ink-muted); flex-shrink: 0; }
 
 /* Type toggle buttons */
 .itin-type-btns { display: flex; gap: 8px; margin-bottom: 2px; }
@@ -2096,6 +2130,62 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   transition: border-color .15s; margin-top: 4px;
 }
 .itin-field-input:focus { outline: none; border-color: var(--ink); }
+
+/* ── Station form (picked / new / edit) ──────────────────────── */
+.itin-station-form {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 0 20px 28px;
+}
+.itin-form-img-wrap {
+  border-radius: 14px; overflow: hidden;
+  height: 180px; margin: 0 -4px;
+}
+.itin-form-img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.itin-form-field {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.itin-form-label {
+  font-size: 12px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em;
+}
+.itin-form-input {
+  background: var(--surface); border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-sm); padding: 10px 12px; color: var(--ink);
+  font-size: 15px; width: 100%; direction: rtl; font-family: inherit;
+  transition: border-color .15s; resize: none;
+}
+.itin-form-input:focus { outline: none; border-color: var(--ink); }
+
+/* Period chips */
+.itin-period-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.itin-period-chip {
+  padding: 6px 13px; border-radius: 99px; border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.itin-period-chip.active {
+  border-color: #c8f135; background: #c8f135; color: #1a1a1a; font-weight: 700;
+}
+
+/* Save button — lime green */
+.itin-btn-save {
+  height: 50px; border-radius: 14px;
+  background: #c8f135; color: #1a1a1a;
+  border: none; font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: opacity .15s; margin-top: 2px;
+}
+.itin-btn-save:hover:not(:disabled) { opacity: .88; }
+.itin-btn-save:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Delete link */
+.itin-btn-delete {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-muted); font-size: 14px; padding: 6px 0;
+  text-align: center; font-family: inherit;
+  transition: color .15s;
+}
+.itin-btn-delete:hover { color: #ef4444; }
 
 /* ════ EMPTY (no trip dates) ══════════════════════════════════ */
 .itin-empty {

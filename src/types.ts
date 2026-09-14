@@ -110,6 +110,7 @@ export interface ItineraryItem {
   status: ItemStatus;
   address?: string;
   notes?: string;
+  imageUrl?: string;
 }
 
 export interface Flight {

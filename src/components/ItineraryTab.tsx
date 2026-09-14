@@ -145,10 +145,11 @@ interface StationForm {
   time: string;
   notes: string;
   address: string;
+  imageUrl: string;
 }
 
 function emptyForm(): StationForm {
-  return { name: '', type: 'activity', period: 'unset', time: '', notes: '', address: '' };
+  return { name: '', type: 'activity', period: 'unset', time: '', notes: '', address: '', imageUrl: '' };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -162,6 +163,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
   const [sheetOpen, setSheetOpen]   = useState(false);
   const [editItem, setEditItem]     = useState<ItineraryItem | null>(null);
   const [sourceChosen, setSourceChosen] = useState<'bank' | 'new' | 'picked' | null>(null);
+  const [bankFilter,   setBankFilter]   = useState<string>('הכל'); // category filter inside bank
   const [form, setForm]             = useState<StationForm>(emptyForm());
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
@@ -199,12 +201,13 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
     if (item) {
       setEditItem(item);
       setForm({
-        name:    item.name,
-        type:    item.type,
-        period:  item.period || 'unset',
-        time:    item.time   || '',
-        notes:   item.notes  || '',
-        address: item.address || '',
+        name:     item.name,
+        type:     item.type,
+        period:   item.period || 'unset',
+        time:     item.time   || '',
+        notes:    item.notes  || '',
+        address:  item.address || '',
+        imageUrl: item.imageUrl || '',
       });
       setSourceChosen('new');
     } else {
@@ -220,25 +223,27 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
     setEditItem(null);
     setSourceChosen(null);
     setForm(emptyForm());
+    setBankFilter('הכל');
   }
 
   function pickPlace(p: Place) {
     const type: ItemType = (p.type === 'מסעדה' || p.type === 'קפה') ? 'food' : 'activity';
-    setForm(prev => ({ ...prev, name: p.nameHe, type, address: p.address || '' }));
+    setForm(prev => ({ ...prev, name: p.nameHe, type, address: p.address || '', imageUrl: p.imageUrl || '' }));
     setSourceChosen('picked');
   }
 
   function saveStation() {
     if (!form.name.trim()) return;
     const base = {
-      date:    activeDay,
-      type:    form.type,
-      name:    form.name.trim(),
-      period:  form.period,
-      time:    form.time    || undefined,
-      notes:   form.notes.trim()   || undefined,
-      address: form.address.trim() || undefined,
-      status:  'planned' as const,
+      date:     activeDay,
+      type:     form.type,
+      name:     form.name.trim(),
+      period:   form.period,
+      time:     form.time    || undefined,
+      notes:    form.notes.trim()   || undefined,
+      address:  form.address.trim() || undefined,
+      imageUrl: form.imageUrl || undefined,
+      status:   'planned' as const,
     };
     if (editItem) {
       save({ itinerary: itinerary.map(i => i.id === editItem.id ? { ...i, ...base } : i) });
@@ -495,10 +500,11 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
         >
           <div className="exp-sheet exp-sheet--form itin-sheet">
             <div className="exp-sheet-hdr">
+              <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
               <span className="exp-sheet-title">
                 {editItem ? 'עריכת תחנה' : 'הוספת תחנה'}
               </span>
-              <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+              <div />
             </div>
 
             {/* Step 1: choose source (new item only) */}
@@ -516,110 +522,176 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
             )}
 
             {/* Bank list */}
-            {sourceChosen === 'bank' && (
-              <>
-                {bankPlaces.length === 0 ? (
-                  <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--ink-muted)', fontSize: 14 }}>
-                    {dayBase
-                      ? `אין מקומות בבנק לעיר "${dayBase}"`
-                      : 'הבנק ריק — הוסף מקומות בלשונית מקומות'}
-                  </div>
-                ) : (
-                  <div className="itin-bank-list">
-                    {bankPlaces.map(p => (
-                      <button key={p.id} className="itin-bank-item" onClick={() => pickPlace(p)}>
-                        <span className="itin-bank-item-name">{p.nameHe}</span>
-                        {p.city && <span className="itin-bank-item-city">{p.city}</span>}
+            {sourceChosen === 'bank' && (() => {
+              const BANK_CATS = [
+                { key: 'הכל',     label: '🌍 הכל' },
+                { key: 'אוכל',    label: '🍽️ אוכל' },
+                { key: 'אטרקציה', label: '🎯 אטרקציות' },
+                { key: 'טבע',     label: '🌿 טבע' },
+                { key: 'מוזיאון', label: '🏛️ מוזיאון' },
+                { key: 'שוק',     label: '🏪 שוק' },
+              ];
+              const FOOD = new Set(['מסעדה', 'קפה']);
+              const filtered = bankPlaces.filter(p => {
+                if (bankFilter === 'הכל')    return true;
+                if (bankFilter === 'אוכל')   return FOOD.has(p.type);
+                if (bankFilter === 'אטרקציה') return p.type === 'אטרקציה';
+                if (bankFilter === 'טבע')    return p.type === 'פארק';
+                if (bankFilter === 'מוזיאון') return p.type === 'מוזיאון';
+                if (bankFilter === 'שוק')    return p.type === 'שוק';
+                return true;
+              });
+              return (
+                <>
+                  {/* Category chips */}
+                  <div className="itin-bank-cats">
+                    {BANK_CATS.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        className={`chip chip-sm ${bankFilter === key ? 'chip-active' : ''}`}
+                        onClick={() => setBankFilter(key)}
+                      >
+                        {label}
+                        <span className="chip-count">
+                          {key === 'הכל' ? bankPlaces.length
+                            : key === 'אוכל' ? bankPlaces.filter(p => FOOD.has(p.type)).length
+                            : key === 'אטרקציה' ? bankPlaces.filter(p => p.type === 'אטרקציה').length
+                            : key === 'טבע'     ? bankPlaces.filter(p => p.type === 'פארק').length
+                            : key === 'מוזיאון' ? bankPlaces.filter(p => p.type === 'מוזיאון').length
+                            : bankPlaces.filter(p => p.type === 'שוק').length}
+                        </span>
                       </button>
                     ))}
                   </div>
-                )}
-                <div style={{ padding: '0 16px 16px' }}>
-                  <button
-                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: 'var(--ink-muted)', fontSize: 13 }}
-                    onClick={() => setSourceChosen('new')}
-                  >
-                    ✏️ תחנה חדשה במקום
-                  </button>
-                </div>
-              </>
-            )}
+
+                  {/* Places list */}
+                  {filtered.length === 0 ? (
+                    <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--ink-muted)', fontSize: 14 }}>
+                      {bankPlaces.length === 0
+                        ? (dayBase ? `אין מקומות בבנק לעיר "${dayBase}"` : 'הבנק ריק — הוסף מקומות בלשונית מקומות')
+                        : `אין מקומות בקטגוריה "${bankFilter}"`}
+                    </div>
+                  ) : (
+                    <div className="itin-bank-list">
+                      {filtered.map(p => (
+                        <button key={p.id} className="itin-bank-item" onClick={() => pickPlace(p)}>
+                          <span className="itin-bank-item-type">{p.type}</span>
+                          <span className="itin-bank-item-name">{p.nameHe}</span>
+                          {p.city && <span className="itin-bank-item-city">{p.city}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ padding: '0 16px 16px' }}>
+                    <button
+                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: 'var(--ink-muted)', fontSize: 13 }}
+                      onClick={() => setSourceChosen('new')}
+                    >
+                      ✏️ תחנה חדשה במקום
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Form fields */}
             {(sourceChosen === 'new' || sourceChosen === 'picked' || editItem) && (
-              <div className="exp-sheet-fields">
-                <label>
-                  שם הפעילות
+              <div className="itin-station-form">
+
+                {/* Image (picked from bank) */}
+                {form.imageUrl && (
+                  <div className="itin-form-img-wrap">
+                    <img src={form.imageUrl} alt={form.name} className="itin-form-img" />
+                  </div>
+                )}
+
+                {/* Name */}
+                <div className="itin-form-field">
+                  <label className="itin-form-label">שם הפעילות</label>
                   <input
-                    className="itin-field-input"
+                    className="itin-form-input"
                     placeholder="הזן שם..."
                     value={form.name}
                     // eslint-disable-next-line jsx-a11y/no-autofocus
-                    autoFocus
+                    autoFocus={!form.imageUrl}
                     onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                   />
-                </label>
+                </div>
 
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-muted)', fontWeight: 700, marginBottom: 6 }}>סוג</div>
-                  <div className="itin-type-btns">
-                    <button
-                      className={form.type === 'activity' ? 'active' : ''}
-                      onClick={() => setForm(p => ({ ...p, type: 'activity' }))}
-                    >🎯 פעילות</button>
-                    <button
-                      className={form.type === 'food' ? 'active' : ''}
-                      onClick={() => setForm(p => ({ ...p, type: 'food' }))}
-                    >🍽️ אוכל</button>
+                {/* Type — only for new/edit */}
+                {(sourceChosen === 'new' || editItem) && (
+                  <div className="itin-form-field">
+                    <label className="itin-form-label">סוג</label>
+                    <div className="itin-type-btns">
+                      <button
+                        className={form.type === 'activity' ? 'active' : ''}
+                        onClick={() => setForm(p => ({ ...p, type: 'activity' }))}
+                      >🎯 פעילות</button>
+                      <button
+                        className={form.type === 'food' ? 'active' : ''}
+                        onClick={() => setForm(p => ({ ...p, type: 'food' }))}
+                      >🍽️ אוכל</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Period chips */}
+                <div className="itin-form-field">
+                  <label className="itin-form-label">חלק ביום</label>
+                  <div className="itin-period-chips">
+                    {([
+                      { v: 'morning',   label: '🌅 בוקר' },
+                      { v: 'afternoon', label: '☀️ צהריים' },
+                      { v: 'evening',   label: '🌙 ערב' },
+                      { v: 'unset',     label: '⏳ טרם נקבע' },
+                    ] as { v: DayPeriod; label: string }[]).map(({ v, label }) => (
+                      <button
+                        key={v}
+                        className={`itin-period-chip ${form.period === v ? 'active' : ''}`}
+                        onClick={() => setForm(p => ({ ...p, period: v }))}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <label>
-                  חלק ביום
-                  <select
-                    className="itin-field-input"
-                    value={form.period}
-                    onChange={e => setForm(p => ({ ...p, period: e.target.value as DayPeriod }))}
-                  >
-                    <option value="morning">🌅 בוקר</option>
-                    <option value="afternoon">☀️ צהריים</option>
-                    <option value="evening">🌙 ערב</option>
-                    <option value="unset">טרם נקבע</option>
-                  </select>
-                </label>
-
-                <label>
-                  שעה (אופציונלי)
+                {/* Time */}
+                <div className="itin-form-field">
+                  <label className="itin-form-label">שעה <span style={{ fontWeight: 400, color: 'var(--ink-muted)' }}>(אופציונלי)</span></label>
                   <input
-                    className="itin-field-input"
+                    className="itin-form-input"
                     type="time"
                     value={form.time}
                     onChange={e => setForm(p => ({ ...p, time: e.target.value }))}
                   />
-                </label>
+                </div>
 
-                <label>
-                  הערה (אופציונלי)
+                {/* Notes */}
+                <div className="itin-form-field">
+                  <label className="itin-form-label">הערה <span style={{ fontWeight: 400, color: 'var(--ink-muted)' }}>(אופציונלי)</span></label>
                   <textarea
-                    className="itin-field-input"
+                    className="itin-form-input"
                     rows={2}
                     placeholder="הערה..."
                     value={form.notes}
                     onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                   />
-                </label>
+                </div>
 
-                <button className="btn-forest" style={{ marginTop: 4 }} onClick={saveStation}>
-                  {editItem ? 'שמור שינויים' : 'הוסף תחנה'}
+                {/* Save button — lime green like budget tab */}
+                <button
+                  className="itin-btn-save"
+                  disabled={!form.name.trim()}
+                  onClick={saveStation}
+                >
+                  {editItem ? '✓ שמור שינויים' : '+ הוסף תחנה'}
                 </button>
 
                 {editItem && (
                   <button
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--cat-activity)', fontSize: 14, padding: '8px 0',
-                      textAlign: 'center', width: '100%',
-                    }}
+                    className="itin-btn-delete"
                     onClick={() => { deleteItem(editItem.id); closeSheet(); }}
                   >
                     🗑️ מחק תחנה

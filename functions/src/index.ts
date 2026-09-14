@@ -5,8 +5,9 @@ import {
   FieldValue, Timestamp,
 } from 'firebase-admin/firestore';
 
-// Server-side secret — never exposed to client bundle
-const ANTHROPIC_KEY = defineSecret('ANTHROPIC_KEY');
+// Server-side secrets — never exposed to client bundle
+const ANTHROPIC_KEY    = defineSecret('ANTHROPIC_KEY');
+const GOOGLE_PLACES_KEY = defineSecret('GOOGLE_PLACES_KEY');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -22,7 +23,7 @@ interface EnrichRequest {
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 
-const DAILY_USER_QUOTA   = 20;   // calls per user per day
+const DAILY_USER_QUOTA   = 50;   // calls per user per day (Claude AI only)
 const DAILY_GLOBAL_QUOTA = 500;  // calls total per day
 
 function todayKey() {
@@ -200,120 +201,24 @@ export const enrichPlace = onCall(
   },
 );
 
-// ── Place Search — Phase 1 (Mock Data) ───────────────────────────────────────
+// ── Place Search — Google Places (New) ───────────────────────────────────────
 
-interface MockPlace {
-  providerPlaceId: string;
-  name: string;
-  nameHe?: string;
-  address: string;
-  category: string;
-  country: string; // ISO-2 code — used to filter by trip destination
-  location: { lat: number; lng: number };
-  description?: string;
-  website?: string;
-  imageUrls?: string[];
-}
-
-const MOCK_PLACES: MockPlace[] = [
-  // ── Poland — Kraków ───────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_krakow_wawel', country: 'PL', name: 'Wawel Royal Castle', nameHe: 'טירת וואוול', address: 'Wawel 5, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0542, lng: 19.9355 }, website: 'https://wawel.krakow.pl', description: 'Medieval castle complex on Wawel Hill' },
-  { providerPlaceId: 'mock_krakow_pod_aniolami', country: 'PL', name: 'Pod Aniolami', address: 'ul. Grodzka 35, 31-001 Kraków', category: 'מסעדה', location: { lat: 50.0591, lng: 19.9382 }, description: 'Traditional Polish cuisine in a historic cellar' },
-  { providerPlaceId: 'mock_krakow_old_town', country: 'PL', name: 'Stare Miasto (Old Town)', nameHe: 'העיר העתיקה של קרקוב', address: 'Rynek Główny, Kraków', category: 'שכונה', location: { lat: 50.0614, lng: 19.9372 }, description: 'Historic city center with the main market square' },
-  { providerPlaceId: 'mock_krakow_salt_mine', country: 'PL', name: 'Wieliczka Salt Mine', nameHe: "מכרה המלח וייליצ'קה", address: 'Park Kingi 1, 32-020 Wieliczka', category: 'אטרקציה', location: { lat: 49.9838, lng: 20.0548 }, website: 'https://wieliczka-saltmine.com', description: 'UNESCO World Heritage underground salt mine' },
-  { providerPlaceId: 'mock_krakow_kazimierz', country: 'PL', name: 'Kazimierz Jewish Quarter', nameHe: 'רובע קזימייז', address: 'Kazimierz, Kraków', category: 'שכונה', location: { lat: 50.0515, lng: 19.9440 }, description: 'Historic Jewish quarter with synagogues and galleries' },
-  { providerPlaceId: 'mock_krakow_market', country: 'PL', name: 'Stary Kleparz Market', nameHe: "שוק סטארי קלפאז'", address: 'ul. Stary Kleparz, Kraków', category: 'שוק', location: { lat: 50.0671, lng: 19.9400 }, description: 'Traditional outdoor food and flower market' },
-  { providerPlaceId: 'mock_krakow_hawelka', country: 'PL', name: 'Hawelka', address: 'Rynek Główny 34, 31-010 Kraków', category: 'מסעדה', location: { lat: 50.0618, lng: 19.9378 }, website: 'https://hawelka.pl', description: 'Iconic restaurant on the Main Market Square since 1876' },
-  { providerPlaceId: 'mock_krakow_cloth_hall', country: 'PL', name: 'Cloth Hall (Sukiennice)', nameHe: 'אולם הבד', address: 'Rynek Główny 1-3, 31-042 Kraków', category: 'שוק', location: { lat: 50.0616, lng: 19.9375 }, description: 'Gothic trading hall in the center of the main square' },
-  { providerPlaceId: 'mock_krakow_schindler', country: 'PL', name: "Schindler's Factory Museum", nameHe: 'מפעל שינדלר', address: 'ul. Lipowa 4, 30-702 Kraków', category: 'מוזיאון', location: { lat: 50.0474, lng: 19.9612 }, website: 'https://muzeumkrakowa.pl', description: 'Museum dedicated to WWII Kraków history' },
-  { providerPlaceId: 'mock_krakow_national_museum', country: 'PL', name: 'National Museum in Kraków', nameHe: 'המוזיאון הלאומי בקרקוב', address: 'al. 3 Maja 1, 30-062 Kraków', category: 'מוזיאון', location: { lat: 50.0617, lng: 19.9186 }, website: 'https://mnk.pl', description: 'Largest museum in Poland' },
-  { providerPlaceId: 'mock_krakow_wawel_dragon', country: 'PL', name: 'Smocza Jama (Dragon Cave)', nameHe: "מערת הדרקון של וואוול", address: 'Wawel, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0535, lng: 19.9348 }, description: 'Legendary cave beneath Wawel Hill' },
-  // Poland — Zakopane & Tatry
-  { providerPlaceId: 'mock_zak_chocho', country: 'PL', name: 'Chochołowskie Termy', nameHe: 'מרחצאות חוחולובסקיה', address: 'ul. Jana Pawła II 2, 34-481 Chochołów', category: 'אטרקציה', location: { lat: 49.4741, lng: 19.7613 }, website: 'https://chocholowskietermy.pl', description: 'Popular thermal baths and water park near Zakopane' },
-  { providerPlaceId: 'mock_zak_krupowki', country: 'PL', name: 'Krupówki Street', nameHe: 'רחוב קרופובקי', address: 'ul. Krupówki, 34-500 Zakopane', category: 'שכונה', location: { lat: 49.2986, lng: 19.9551 }, description: 'Main pedestrian street of Zakopane with restaurants and shops' },
-  { providerPlaceId: 'mock_zak_morskie_oko', country: 'PL', name: 'Morskie Oko Lake', nameHe: 'אגם מורסקיה אוקו', address: 'Tatrzański Park Narodowy, 34-500 Zakopane', category: 'פארק', location: { lat: 49.1993, lng: 20.0703 }, description: 'The most famous mountain lake in Poland, a 9km hike from Zakopane' },
-  { providerPlaceId: 'mock_zak_gubalowka', country: 'PL', name: 'Gubałówka Hill', nameHe: "גוּבַּלוֹבְקָה", address: 'ul. Gubałówka, 34-500 Zakopane', category: 'אטרקציה', location: { lat: 49.3082, lng: 19.9490 }, description: 'Mountain viewpoint above Zakopane, reachable by funicular' },
-  { providerPlaceId: 'mock_zak_tatra_np', country: 'PL', name: 'Tatra National Park', nameHe: 'הפארק הלאומי הטטרי', address: 'Kuźnice, 34-500 Zakopane', category: 'פארק', location: { lat: 49.2632, lng: 19.9821 }, website: 'https://tpn.pl', description: 'The only mountain national park in Poland — stunning peaks and valleys' },
-  { providerPlaceId: 'mock_zak_termy_bania', country: 'PL', name: 'Termy Bania', nameHe: "טרמי בניה (בִּיאָלְקָה)", address: 'ul. Bania 1, 34-405 Białka Tatrzańska', category: 'אטרקציה', location: { lat: 49.3811, lng: 20.0964 }, website: 'https://termybania.pl', description: 'Thermal pools and spa with panoramic Tatra views' },
-  { providerPlaceId: 'mock_zak_dolina_koscieliska', country: 'PL', name: 'Kościeliska Valley', nameHe: "עמק קושצ'יליסקה", address: 'Dolina Kościeliska, Tatrzański Park Narodowy', category: 'פארק', location: { lat: 49.2660, lng: 19.8757 }, description: 'Beautiful valley with limestone gorges and caves, easy hiking' },
-  // Poland — Auschwitz
-  { providerPlaceId: 'mock_auschwitz', country: 'PL', name: 'Auschwitz-Birkenau Memorial and Museum', nameHe: 'אנדרטת ומוזיאון אושוויץ-בירקנאו', address: 'ul. Więźniów Oświęcimia 20, 32-603 Oświęcim', category: 'מוזיאון', location: { lat: 50.0271, lng: 19.2037 }, website: 'https://auschwitz.org', description: 'UNESCO World Heritage site — former Nazi concentration camp' },
-  // Poland — Energylandia (Zator)
-  { providerPlaceId: 'mock_energylandia', country: 'PL', name: 'Energylandia', nameHe: 'אנרג\'יילנד', address: 'Brody 1, 32-640 Zator', category: 'אטרקציה', location: { lat: 49.9909, lng: 19.4398 }, website: 'https://energylandia.pl', description: "Poland's largest amusement park" },
-  // ── Israel ────────────────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_tlv_carmel', country: 'IL', name: 'Carmel Market', nameHe: 'שוק הכרמל', address: 'Shuk HaCarmel, Tel Aviv', category: 'שוק', location: { lat: 32.0653, lng: 34.7663 }, description: 'Bustling outdoor market in Tel Aviv' },
-  { providerPlaceId: 'mock_tlv_jaffa', country: 'IL', name: 'Jaffa Old City', nameHe: 'עיר עתיקה של יפו', address: 'Old Jaffa, Tel Aviv-Yafo', category: 'שכונה', location: { lat: 32.0531, lng: 34.7518 } },
-  { providerPlaceId: 'mock_tlv_habasta', country: 'IL', name: 'HaBasta', nameHe: 'הבסטה', address: 'Hashomer St 4, Tel Aviv', category: 'מסעדה', location: { lat: 32.0657, lng: 34.7690 }, description: 'Popular farm-to-table restaurant near Carmel Market' },
-  // ── France — Paris ────────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_paris_eiffel', country: 'FR', name: 'Eiffel Tower', nameHe: 'מגדל אייפל', address: 'Champ de Mars, 5 Av. Anatole France, 75007 Paris', category: 'אטרקציה', location: { lat: 48.8584, lng: 2.2945 }, website: 'https://www.toureiffel.paris' },
-  { providerPlaceId: 'mock_paris_louvre', country: 'FR', name: 'Louvre Museum', nameHe: 'מוזיאון הלובר', address: 'Rue de Rivoli, 75001 Paris', category: 'מוזיאון', location: { lat: 48.8606, lng: 2.3376 }, website: 'https://www.louvre.fr' },
-  { providerPlaceId: 'mock_paris_comptoir', country: 'FR', name: 'Le Comptoir du Relais', address: "9 Carrefour de l'Odéon, 75006 Paris", category: 'מסעדה', location: { lat: 48.8515, lng: 2.3401 }, description: 'Classic French bistro in Saint-Germain' },
-  // ── Italy — Rome ──────────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_rome_colosseum', country: 'IT', name: 'Colosseum', nameHe: 'הקולוסיאום', address: 'Piazza del Colosseo, 1, 00184 Roma RM', category: 'אטרקציה', location: { lat: 41.8902, lng: 12.4922 }, website: 'https://www.parcocolosseo.it' },
-  { providerPlaceId: 'mock_rome_vatican', country: 'IT', name: 'Vatican Museums', nameHe: 'מוזיאוני הוותיקן', address: 'Viale Vaticano, 00165 Roma RM', category: 'מוזיאון', location: { lat: 41.9065, lng: 12.4534 } },
-  { providerPlaceId: 'mock_rome_da_enzo', country: 'IT', name: 'Da Enzo al 29', address: 'Via dei Vascellari, 29, 00153 Roma RM', category: 'מסעדה', location: { lat: 41.8879, lng: 12.4703 }, description: 'Trattoria in Trastevere neighborhood' },
-  // ── Spain — Barcelona ─────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_bcn_sagrada', country: 'ES', name: 'Sagrada Família', nameHe: 'סגרדה פמיליה', address: 'C/ de Mallorca, 401, 08013 Barcelona', category: 'אטרקציה', location: { lat: 41.4036, lng: 2.1744 }, website: 'https://sagradafamilia.org' },
-  { providerPlaceId: 'mock_bcn_boqueria', country: 'ES', name: 'La Boqueria Market', nameHe: 'שוק לה בוקריה', address: 'La Rambla, 91, 08001 Barcelona', category: 'שוק', location: { lat: 41.3817, lng: 2.1718 }, description: 'Famous public market on La Rambla' },
-  // ── Netherlands — Amsterdam ───────────────────────────────────────────────
-  { providerPlaceId: 'mock_ams_rijks', country: 'NL', name: 'Rijksmuseum', nameHe: 'ריקסמוזיאום', address: 'Museumstraat 1, 1071 XX Amsterdam', category: 'מוזיאון', location: { lat: 52.3600, lng: 4.8852 }, website: 'https://www.rijksmuseum.nl' },
-  { providerPlaceId: 'mock_ams_vondelpark', country: 'NL', name: 'Vondelpark', nameHe: 'פארק פונדל', address: 'Vondelpark, 1071 Amsterdam', category: 'פארק', location: { lat: 52.3579, lng: 4.8687 }, description: "Amsterdam's largest and most famous park" },
-  // ── Greece — Athens ───────────────────────────────────────────────────────
-  { providerPlaceId: 'mock_ath_acropolis', country: 'GR', name: 'Acropolis of Athens', nameHe: 'האקרופוליס של אתונה', address: 'Acropolis, Athens 105 58, Greece', category: 'אטרקציה', location: { lat: 37.9715, lng: 23.7267 }, website: 'https://www.theacropolismuseum.gr' },
-  { providerPlaceId: 'mock_ath_monastiraki', country: 'GR', name: 'Monastiraki Flea Market', nameHe: 'שוק מונסטירקי', address: 'Platia Monastirakiou, Athina 105 55', category: 'שוק', location: { lat: 37.9762, lng: 23.7243 } },
-];
-
-/**
- * Extract a 2-letter country code from a free-text destination string.
- * Returns null when the destination is ambiguous or unknown.
- */
-function guessCountry(destination: string): string | null {
-  const d = destination.toLowerCase();
-  if (/poland|פולין|krak[oó]w|warsaw|warszawa|zakopane|gdańsk|gdansk|wrocław|wroclaw|wieliczka|auschwitz|o[sś]wi[eę]cim|zator|energylandia|tatry|tatra|chocho|bania|białka|bialka/.test(d)) return 'PL';
-  if (/france|צרפת|paris|פריז|lyon|nice|marseille/.test(d)) return 'FR';
-  if (/italy|italia|איטליה|rome|roma|רומא|milan|florence|venice|firenze/.test(d)) return 'IT';
-  if (/spain|españa|ספרד|barcelona|ברצלונה|madrid|מדריד|seville|sevilla/.test(d)) return 'ES';
-  if (/netherlands|holland|הולנד|amsterdam|אמסטרדם/.test(d)) return 'NL';
-  if (/greece|grecia|יוון|athens|athina|אתונה/.test(d)) return 'GR';
-  if (/israel|ישראל|tel.?aviv|תל.?אביב|jerusalem|ירושלים|haifa|חיפה/.test(d)) return 'IL';
-  return null;
-}
-
-function mockSearch(query: string, countryCode: string | null): MockPlace[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return [];
-
-  // Score each place: higher = better match
-  const scored: Array<{ place: MockPlace; score: number }> = [];
-
-  for (const p of MOCK_PLACES) {
-    // Skip places from other countries when country is known
-    if (countryCode && p.country !== countryCode) continue;
-
-    let score = 0;
-    const nameLow = p.name.toLowerCase();
-    const nameHeLow = (p.nameHe || '').toLowerCase();
-    const descLow  = (p.description || '').toLowerCase();
-
-    if (nameLow === q || nameHeLow === q)               score += 100; // exact match
-    else if (nameLow.startsWith(q) || nameHeLow.startsWith(q)) score += 60;
-    else if (nameLow.includes(q) || nameHeLow.includes(q))     score += 40;
-    else if (p.address.toLowerCase().includes(q))               score += 20;
-    else if (p.category.includes(q))                            score += 10;
-    else if (descLow.includes(q))                               score += 5;
-
-    if (score > 0) scored.push({ place: p, score });
+/** Map Google place types array to a single Hebrew category label */
+function mapGoogleTypesToCategory(types: string[]): string {
+  for (const t of types) {
+    if (['restaurant', 'food', 'meal_takeaway', 'meal_delivery'].includes(t)) return 'מסעדה';
+    if (['cafe', 'bakery', 'coffee_shop'].includes(t))                         return 'קפה';
+    if (['museum'].includes(t))                                                 return 'מוזיאון';
+    if (['park', 'national_park', 'nature_reserve', 'campground', 'natural_feature'].includes(t)) return 'פארק';
+    if (['market', 'supermarket', 'shopping_mall', 'clothing_store', 'store', 'department_store'].includes(t)) return 'שוק';
+    if (['tourist_attraction', 'point_of_interest', 'amusement_park',
+         'church', 'synagogue', 'mosque', 'place_of_worship',
+         'stadium', 'castle', 'aquarium', 'zoo', 'art_gallery'].includes(t)) return 'אטרקציה';
+    if (['sublocality', 'neighborhood', 'locality'].includes(t))               return 'שכונה';
   }
-
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(s => s.place);
+  return 'אחר';
 }
 
-function getMockById(id: string): MockPlace | undefined {
-  return MOCK_PLACES.find(p => p.providerPlaceId === id);
-}
 
 /** Verify user has at least viewer access to a trip. Returns tripData. */
 async function verifyTripAccess(
@@ -349,27 +254,67 @@ const PLACES_CORS = [
 // ── searchPlaces ──────────────────────────────────────────────────────────────
 
 export const searchPlaces = onCall(
-  { maxInstances: 10, timeoutSeconds: 10, cors: PLACES_CORS },
+  { secrets: [GOOGLE_PLACES_KEY], maxInstances: 10, timeoutSeconds: 15, cors: PLACES_CORS },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
-    const { tripId, query } = request.data as { tripId: string; query?: string; city?: string };
+    const { tripId, query } = request.data as { tripId: string; query?: string };
     if (!tripId || !query?.trim()) throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
 
     const trip = await verifyTripAccess(request.auth.uid, tripId);
+    const destination = (trip.destination as string | undefined) ?? '';
 
-    // Infer country from trip destination so results are scoped to the right country
-    const countryCode = guessCountry((trip.destination as string | undefined) || '');
-    // Use query alone for text matching — city is used only for future geo-filtering
-    const results = mockSearch(query.trim(), countryCode);
+    const apiKey = GOOGLE_PLACES_KEY.value().trim();
+    if (!apiKey) throw new HttpsError('internal', 'מפתח Google Places חסר.');
+    console.log('PLACES_KEY length:', apiKey.length, 'prefix:', apiKey.slice(0, 8));
+
+    // Append destination to focus results on the right city/country
+    const searchQuery = destination ? `${query.trim()} ${destination}` : query.trim();
+
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'X-Goog-Api-Key':  apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types,places.rating,places.photos,places.location',
+      },
+      body: JSON.stringify({
+        textQuery:      searchQuery,
+        languageCode:   'he',
+        maxResultCount: 5,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Google Places searchText error:', res.status, errText);
+      throw new HttpsError('internal', `שגיאת Google Places: ${res.status}`);
+    }
+
+    const data = await res.json() as {
+      places?: Array<{
+        id:               string;
+        displayName?:     { text: string };
+        formattedAddress?: string;
+        types?:           string[];
+        rating?:          number;
+        photos?:          Array<{ name: string }>;
+        location?:        { latitude: number; longitude: number };
+      }>;
+    };
+
+    const places = data.places ?? [];
 
     return {
       requestId: String(Date.now()),
-      results: results.map(p => ({
-        providerPlaceId: p.providerPlaceId,
-        name: p.name,
-        address: p.address,
-        category: p.category,
-        location: p.location,
+      results: places.map(p => ({
+        providerPlaceId: p.id,
+        name:            p.displayName?.text ?? '',
+        address:         p.formattedAddress  ?? '',
+        category:        mapGoogleTypesToCategory(p.types ?? []),
+        location:        p.location
+          ? { lat: p.location.latitude, lng: p.location.longitude }
+          : undefined,
+        photoReference:  p.photos?.[0]?.name ?? null,
       })),
     };
   },
@@ -378,7 +323,13 @@ export const searchPlaces = onCall(
 // ── getPlaceDetails ───────────────────────────────────────────────────────────
 
 export const getPlaceDetails = onCall(
-  { secrets: [ANTHROPIC_KEY], maxInstances: 5, timeoutSeconds: 30, memory: '256MiB', cors: PLACES_CORS },
+  {
+    secrets:        [ANTHROPIC_KEY, GOOGLE_PLACES_KEY],
+    maxInstances:   5,
+    timeoutSeconds: 30,
+    memory:         '256MiB',
+    cors:           PLACES_CORS,
+  },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
     if (request.auth.token.firebase?.sign_in_provider === 'anonymous') {
@@ -389,65 +340,108 @@ export const getPlaceDetails = onCall(
     if (!tripId || !providerPlaceId) throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
 
     await verifyTripAccess(uid, tripId);
+    // No rate limit here — Google Places API is billed by Google, not Anthropic
 
-    const place = getMockById(providerPlaceId);
-    if (!place) throw new HttpsError('not-found', 'המקום לא נמצא.');
+    const googleKey = GOOGLE_PLACES_KEY.value().trim();
+    if (!googleKey) throw new HttpsError('internal', 'מפתח Google Places חסר.');
 
-    await checkRateLimits(uid);
+    // 1. Fetch place details from Google Places (New) API
+    const detailsRes = await fetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(providerPlaceId)}?languageCode=he`,
+      {
+        headers: {
+          'X-Goog-Api-Key':  googleKey,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,types,rating,photos,websiteUri,editorialSummary,location',
+        },
+      },
+    );
 
-    const apiKey = ANTHROPIC_KEY.value();
-    if (!apiKey) throw new HttpsError('internal', 'מפתח API חסר.');
+    if (!detailsRes.ok) {
+      const errText = await detailsRes.text();
+      console.error('Google Places details error:', detailsRes.status, errText);
+      throw new HttpsError('internal', `שגיאת Google Places: ${detailsRes.status}`);
+    }
 
-    // Use existing AI info from mock as defaults; call Claude only for Hebrew translation
-    let nameHe = place.nameHe || place.name;
-    let descriptionHe = place.description || '';
-    let categoryHe = place.category;
+    const place = await detailsRes.json() as {
+      id:                string;
+      displayName?:      { text: string };
+      formattedAddress?: string;
+      types?:            string[];
+      rating?:           number;
+      photos?:           Array<{ name: string }>;
+      websiteUri?:       string;
+      editorialSummary?: { text: string };
+      location?:         { latitude: number; longitude: number };
+    };
 
-    const prompt = `מקום: "${place.name}" (קטגוריה: ${place.category}), כתובת: ${place.address}.${place.description ? ` תיאור: ${place.description}` : ''}
+    // 2. Fetch photo URL (server-side only — keeps API key off the client)
+    let imageUrl = '';
+    if (place.photos?.[0]?.name) {
+      try {
+        const photoRes = await fetch(
+          `https://places.googleapis.com/v1/${place.photos[0].name}/media?key=${googleKey}&maxWidthPx=600&skipHttpRedirect=true`,
+        );
+        if (photoRes.ok) {
+          const photoData = await photoRes.json() as { photoUri?: string };
+          imageUrl = photoData.photoUri ?? '';
+        }
+      } catch { /* continue without photo */ }
+    }
+
+    const name     = place.displayName?.text ?? providerPlaceId;
+    const category = mapGoogleTypesToCategory(place.types ?? []);
+    const descEn   = place.editorialSummary?.text ?? '';
+
+    // 3. Ask Claude (Haiku) for Hebrew name + description
+    let nameHe        = name;
+    let descriptionHe = descEn;
+
+    const anthropicKey = ANTHROPIC_KEY.value();
+    if (anthropicKey) {
+      try {
+        const prompt = `מקום: "${name}" (קטגוריה: ${category}), כתובת: ${place.formattedAddress ?? ''}.${descEn ? ` תיאור: ${descEn}` : ''}
 
 החזר JSON בלבד (ללא טקסט נוסף):
 {
   "nameHe": "שם קצר ומדויק בעברית",
-  "descriptionHe": "תיאור קצר בעברית, משפט אחד",
-  "categoryHe": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר"
+  "descriptionHe": "תיאור קצר בעברית, משפט אחד"
 }`;
-
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type':      'application/json',
-          'x-api-key':         apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 200,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
-      });
-      if (res.ok) {
-        const d = await res.json() as { content?: Array<{ text?: string }> };
-        const text = d.content?.[0]?.text ?? '';
-        const json = JSON.parse(text.replace(/```json|```/g, '').trim()) as Record<string, unknown>;
-        const VALID_TYPES = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
-        if (typeof json.nameHe === 'string' && json.nameHe.trim()) nameHe = json.nameHe.trim();
-        if (typeof json.descriptionHe === 'string') descriptionHe = json.descriptionHe.trim();
-        if (typeof json.categoryHe === 'string' && VALID_TYPES.includes(json.categoryHe as string)) {
-          categoryHe = json.categoryHe as string;
+        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type':      'application/json',
+            'x-api-key':         anthropicKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model:      'claude-haiku-4-5-20251001',
+            max_tokens: 150,
+            messages:   [{ role: 'user', content: prompt }],
+          }),
+        });
+        if (aiRes.ok) {
+          const d = await aiRes.json() as { content?: Array<{ text?: string }> };
+          const text = d.content?.[0]?.text ?? '';
+          const json = JSON.parse(text.replace(/```json|```/g, '').trim()) as Record<string, unknown>;
+          if (typeof json.nameHe        === 'string' && json.nameHe.trim())        nameHe        = json.nameHe.trim();
+          if (typeof json.descriptionHe === 'string' && json.descriptionHe.trim()) descriptionHe = json.descriptionHe.trim();
         }
-      }
-    } catch { /* keep mock defaults on AI failure */ }
+      } catch { /* keep Google defaults */ }
+    }
 
     return {
-      providerPlaceId: place.providerPlaceId,
-      name:       place.name,
+      providerPlaceId: place.id,
+      name,
       nameHe,
-      address:    place.address,
-      category:   categoryHe,
+      address:    place.formattedAddress ?? '',
+      category,
       description: descriptionHe,
-      website:    place.website ?? null,
-      imageUrls:  place.imageUrls ?? [],
+      website:    place.websiteUri ?? null,
+      imageUrls:  imageUrl ? [imageUrl] : [],
+      rating:     place.rating ?? null,
+      location:   place.location
+        ? { lat: place.location.latitude, lng: place.location.longitude }
+        : null,
     };
   },
 );

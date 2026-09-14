@@ -13,9 +13,19 @@ const TYPE_ICONS: Record<string, string> = {
 const WEEK_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
-// Food types — shown in "אוכל" tab
+// Food types
 const FOOD_TYPES = new Set<PlaceType>(['מסעדה', 'קפה']);
-type FilterKey = 'הכל' | 'must';
+type FilterKey = 'הכל' | 'must' | 'אטרקציה' | 'אוכל' | 'טבע' | 'מוזיאון' | 'ערים';
+
+const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
+  { key: 'הכל',     label: '🗺️ הכל' },
+  { key: 'must',    label: '⭐ Must' },
+  { key: 'ערים',    label: '🏙️ ערים' },
+  { key: 'אטרקציה', label: '🎯 אטרקציות' },
+  { key: 'אוכל',    label: '🍽️ אוכל' },
+  { key: 'טבע',     label: '🌿 טבע' },
+  { key: 'מוזיאון', label: '🏛️ מוזיאון' },
+];
 
 // Normalize city names (Latin or variant Hebrew) → canonical Hebrew
 const CITY_ALIASES: Record<string, string> = {
@@ -257,8 +267,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [editingId,     setEditingId]     = useState<string | null>(null);
   const [form,          setForm]          = useState<Omit<Place, 'id'>>(blank());
   const [filter,        setFilter]        = useState<FilterKey>('הכל');
-  const [mainTab,       setMainTab]       = useState<'attractions' | 'food'>('attractions');
-  // cityTabs removed — replaced by top-level mainTab
+  const [selectedCity,  setSelectedCity]  = useState<string | null>(null); // active when filter==='ערים'
+  // mainTab removed — replaced by filter chips
   const [aiLoading,     setAiLoading]     = useState(false);
   const [aiError,       setAiError]       = useState('');
   const [imgResults,    setImgResults]    = useState<string[]>([]);
@@ -271,6 +281,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [sheetOpen,       setSheetOpen]       = useState(false);
   const [sheetStep,       setSheetStep]       = useState<SheetStep>('search');
   const [sheetMode,       setSheetMode]       = useState<SheetMode>('manual');
+  const [sheetEditingId,  setSheetEditingId]  = useState<string | null>(null); // null = new, id = edit
   const [searchQuery,     setSearchQuery]     = useState('');
   const [searchResults,   setSearchResults]   = useState<PlaceSearchResult[]>([]);
   const [searchError,     setSearchError]     = useState('');
@@ -311,38 +322,34 @@ export default function PlacesTab({ trip, onChange }: Props) {
     });
   }, [trip.places]);
 
-  /* ── City grouping ──────────────────────────────────────────── */
-  const cityGroups = useMemo(() => {
+  /* ── All unique cities (for ערים chip) ──────────────────────── */
+  const allCities = useMemo(() => {
+    const seen = new Set<string>();
+    const cities: string[] = [];
+    for (const p of trip.places) {
+      const c = normalizeCity(p.city || '');
+      if (c && c !== 'כללי' && !seen.has(c)) { seen.add(c); cities.push(c); }
+    }
+    return cities.sort((a, b) => a.localeCompare(b, 'he'));
+  }, [trip.places]);
+
+  /* ── Filtered flat list (no city grouping) ──────────────────── */
+  const filteredPlaces = useMemo(() => {
     let places = [...trip.places];
-    if (filter === 'must') places = places.filter(p => p.must);
-    // Filter by main tab
-    places = mainTab === 'food'
-      ? places.filter(p => FOOD_TYPES.has(p.type))
-      : places.filter(p => !FOOD_TYPES.has(p.type));
-
-    const map: Record<string, Place[]> = {};
-    places.forEach(p => {
-      const city = normalizeCity(p.city || '');
-      if (!map[city]) map[city] = [];
-      map[city].push(p);
-    });
-
-    return Object.entries(map)
-      .sort(([a], [b]) => a === 'כללי' ? 1 : b === 'כללי' ? -1 : a.localeCompare(b, 'he'))
-      .map(([city, ps]) => ({
-        city,
-        places: ps.sort((a, b) => Number(b.must) - Number(a.must)),
-      }));
-  }, [trip.places, filter, mainTab]);
-
-  // Counts for tab badges
-  const attractionCount = trip.places.filter(p => !FOOD_TYPES.has(p.type)).length;
-  const foodCount       = trip.places.filter(p =>  FOOD_TYPES.has(p.type)).length;
+    switch (filter) {
+      case 'must':    places = places.filter(p => p.must); break;
+      case 'אטרקציה': places = places.filter(p => p.type === 'אטרקציה'); break;
+      case 'אוכל':    places = places.filter(p => FOOD_TYPES.has(p.type)); break;
+      case 'טבע':     places = places.filter(p => p.type === 'פארק'); break;
+      case 'מוזיאון': places = places.filter(p => p.type === 'מוזיאון'); break;
+      case 'ערים':
+        if (selectedCity) places = places.filter(p => normalizeCity(p.city || '') === selectedCity);
+        break;
+    }
+    return places.sort((a, b) => Number(b.must) - Number(a.must));
+  }, [trip.places, filter, selectedCity]);
 
   /* ── CRUD ───────────────────────────────────────────────────── */
-  function openEdit(place: Place) {
-    setForm({ ...place }); setEditingId(place.id); setAiError(''); setModalOpen(true);
-  }
   function closeModal() {
     setModalOpen(false); setEditingId(null); setImgResults([]); setImgSearching(false);
   }
@@ -441,15 +448,29 @@ export default function PlacesTab({ trip, onChange }: Props) {
     setRefreshingId(place.id);
     try {
       const searchTerm = place.nameEn || place.nameHe;
-      // Include destination to disambiguate same-name places in other countries
-      const imgTerm = `${searchTerm} ${trip.destination}`;
-      const [enriched, imgs] = await Promise.all([
-        enrichPlace(searchTerm, trip.destination, place.nameHe).catch(() => ({})),
-        searchImages(imgTerm, place.website || undefined),
+
+      // Real Google Place ID starts with "ChIJ" or similar — never with "mock_"
+      const hasRealGoogleId = place.providerPlaceId &&
+        !place.providerPlaceId.startsWith('mock_');
+
+      // If no real Google ID, try to find one via searchPlaces first
+      let googlePlaceId = hasRealGoogleId ? place.providerPlaceId! : null;
+      if (!googlePlaceId) {
+        const found = await searchPlaces(trip.id, searchTerm, trip.destination)
+          .catch((e) => { console.warn('[Refresh] searchPlaces failed:', e); return null; });
+        googlePlaceId = found?.results?.[0]?.providerPlaceId ?? null;
+        console.log('[Refresh] searchPlaces result:', found?.results?.length, 'places, first ID:', googlePlaceId);
+      }
+
+      const [enriched, googleDetails] = await Promise.all([
+        enrichPlace(searchTerm, trip.destination, place.nameHe).catch((e) => { console.warn('[Refresh] enrichPlace failed:', e?.message); return {}; }),
+        googlePlaceId
+          ? getPlaceDetails(trip.id, googlePlaceId).catch((e) => { console.warn('[Refresh] getPlaceDetails failed:', e?.message); return null; })
+          : Promise.resolve(null),
       ]);
-      // Best image: first from searchImages (OG image is prepended if found), fallback to existing
-      const imgUrl = imgs[0] ?? null;
-      const enrichedCity = (enriched as { city?: string }).city;
+
+      // Google Places photo only (searchImages always fails due to CORS)
+      const imgUrl = (googleDetails?.imageUrls ?? [])[0] ?? null;
       // Smart merge: pick the better value per field; nameHe is always the user's saved name.
       const updatedRec = { ...(place as unknown as Record<string, unknown>) };
       for (const [key, aiVal] of Object.entries(enriched as Record<string, unknown>)) {
@@ -458,7 +479,17 @@ export default function PlacesTab({ trip, onChange }: Props) {
         if (best !== updatedRec[key]) updatedRec[key] = best;
       }
       const updated = updatedRec as unknown as Place;
-      if (enrichedCity && !place.city?.trim()) updated.city = normalizeCity(enrichedCity); // fill city only if missing
+      // City: prefer Google Places city → AI city → keep existing (never re-add if user deleted it)
+      const googleCity = googleDetails?.address
+        ? normalizeCity(googleDetails.address.split(',').slice(-2, -1)[0]?.trim() ?? '')
+        : null;
+      const aiCity = (enriched as { city?: string }).city;
+      if (googleCity) {
+        updated.city = googleCity;          // Google is most accurate
+      } else if (aiCity && !place.city?.trim()) {
+        updated.city = normalizeCity(aiCity); // AI fills only if city was missing
+      }
+      // If user had a city and we found no Google city → keep existing (don't overwrite with AI)
       if (imgUrl) updated.imageUrl = imgUrl;
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
       if (imgUrl) {
@@ -504,10 +535,40 @@ export default function PlacesTab({ trip, onChange }: Props) {
     setSheetOpen(true);
     setSheetStep('details');
     setSheetMode('manual');
+    setSheetEditingId(null);
     setDraft(emptyDraft());
     dirtyFieldsRef.current = new Set();
     setSearchError('');
     setDetailsLoading(false);
+  }
+
+  /** Open sheet pre-filled with an existing place for editing */
+  function openSheetEdit(place: Place) {
+    setSheetOpen(true);
+    setSheetStep('details');
+    setSheetMode('manual');
+    setSheetEditingId(place.id);
+    setDraft({
+      nameHe:      place.nameHe      ?? '',
+      nameEn:      place.nameEn      ?? '',
+      city:        place.city        ?? '',
+      type:        place.type        ?? 'אטרקציה',
+      address:     place.address     ?? '',
+      description: place.description ?? '',
+      website:     place.website     ?? '',
+      priceAdult:  place.priceAdult  != null ? String(place.priceAdult) : '',
+      priceChild:  place.priceChild  != null ? String(place.priceChild) : '',
+      travelTime:  place.travelTime  ?? '',
+      duration:    place.duration    != null ? String(place.duration)   : '',
+      imageUrl:    place.imageUrl    ?? '',
+      must:        place.must        ?? false,
+      providerPlaceId: place.providerPlaceId,
+    });
+    dirtyFieldsRef.current = new Set();
+    setSearchError('');
+    setImgResults(place.imageUrl ? [place.imageUrl] : []);
+    setDetailsLoading(false);
+    setViewPlace(null); // close view modal if open
   }
 
   function closeSheet() {
@@ -517,6 +578,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
       if (!window.confirm('יש שינויים שלא נשמרו. לסגור?')) return;
     }
     setSheetOpen(false);
+    setSheetEditingId(null);
     latestSearchRef.current  = '';
     latestDetailsRef.current = '';
   }
@@ -611,7 +673,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
     }
   }
 
-  /** Refresh: fill only empty fields, never overwrite user edits */
+  /** Refresh: fill only empty fields, never overwrite user edits. Also fetches Google photo. */
   async function handleRefill() {
     const term = (draft.nameEn || draft.nameHe).trim();
     if (!term) { setSearchError('הזיני שם כדי להשלים פרטים'); return; }
@@ -620,27 +682,53 @@ export default function PlacesTab({ trip, onChange }: Props) {
     const reqId = String(Date.now());
     latestDetailsRef.current = reqId;
     try {
-      const result = await enrichPlace(term, trip.destination, draft.nameHe || undefined);
+      // Find Google Place ID if not already known
+      const hasRealId = draft.providerPlaceId && !draft.providerPlaceId.startsWith('mock_');
+      let googlePlaceId = hasRealId ? draft.providerPlaceId! : null;
+      if (!googlePlaceId) {
+        const found = await searchPlaces(trip.id, term, trip.destination).catch(() => null);
+        googlePlaceId = found?.results?.[0]?.providerPlaceId ?? null;
+      }
+
+      // Run AI enrichment + Google photo in parallel
+      const [result, googleDetails] = await Promise.all([
+        enrichPlace(term, trip.destination, draft.nameHe || undefined).catch(() => null),
+        googlePlaceId
+          ? getPlaceDetails(trip.id, googlePlaceId).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
       if (latestDetailsRef.current !== reqId) return;
       const dirty = dirtyFieldsRef.current;
+      const googlePhoto = (googleDetails?.imageUrls ?? [])[0] ?? null;
+
       setDraft(prev => ({
         ...prev,
-        nameHe:      (dirty.has('nameHe')      || prev.nameHe)      ? prev.nameHe      : (result.nameHe    || ''),
-        nameEn:      (dirty.has('nameEn')       || prev.nameEn)      ? prev.nameEn      : (result.nameEn    || ''),
-        city:        (dirty.has('city')         || prev.city)        ? prev.city        : (result.city      || ''),
-        description: (dirty.has('description')  || prev.description) ? prev.description : (result.description || ''),
-        website:     (dirty.has('website')      || prev.website)     ? prev.website     : (result.website   || ''),
-        type:        dirty.has('type')                               ? prev.type        :
-          (result.type && TYPES.includes(result.type) ? result.type : prev.type),
-        travelTime:  (dirty.has('travelTime')   || prev.travelTime)  ? prev.travelTime  : (result.travelTime || ''),
-        priceAdult:  (dirty.has('priceAdult')   || prev.priceAdult)  ? prev.priceAdult  :
-          (result.priceAdult != null ? String(result.priceAdult) : ''),
-        priceChild:  (dirty.has('priceChild')   || prev.priceChild)  ? prev.priceChild  :
-          (result.priceChild != null ? String(result.priceChild) : ''),
+        ...(result ? {
+          nameHe:      (dirty.has('nameHe')      || prev.nameHe)      ? prev.nameHe      : (result.nameHe    || ''),
+          nameEn:      (dirty.has('nameEn')       || prev.nameEn)      ? prev.nameEn      : (result.nameEn    || ''),
+          // Fill city if empty (even if user cleared it — that means they want it auto-detected)
+          city:        prev.city.trim()  ? prev.city  : (result.city || ''),
+          description: (dirty.has('description')  || prev.description) ? prev.description : (result.description || ''),
+          website:     (dirty.has('website')      || prev.website)     ? prev.website     : (result.website   || ''),
+          type:        dirty.has('type')                               ? prev.type        :
+            (result.type && TYPES.includes(result.type) ? result.type : prev.type),
+          travelTime:  (dirty.has('travelTime')   || prev.travelTime)  ? prev.travelTime  : (result.travelTime || ''),
+          priceAdult:  (dirty.has('priceAdult')   || prev.priceAdult)  ? prev.priceAdult  :
+            (result.priceAdult != null ? String(result.priceAdult) : ''),
+          priceChild:  (dirty.has('priceChild')   || prev.priceChild)  ? prev.priceChild  :
+            (result.priceChild != null ? String(result.priceChild) : ''),
+        } : {}),
+        // Update Google Place ID and photo if found
+        providerPlaceId: googlePlaceId ?? prev.providerPlaceId,
+        imageUrl: dirty.has('imageUrl') ? prev.imageUrl : (googlePhoto || prev.imageUrl),
       }));
-    } catch {
+      // Also show the photo in the image results strip
+      if (googlePhoto) setImgResults([googlePhoto]);
+    } catch (err) {
       if (latestDetailsRef.current !== reqId) return;
-      setSearchError('לא הצלחתי להשלים פרטים — ניתן לערוך ידנית');
+      const msg = (err as { message?: string }).message || '';
+      setSearchError(msg.includes('מגבלה') ? msg : 'לא הצלחתי להשלים פרטים — ניתן לערוך ידנית');
     } finally {
       if (latestDetailsRef.current === reqId) setDetailsLoading(false);
     }
@@ -653,7 +741,37 @@ export default function PlacesTab({ trip, onChange }: Props) {
     setSheetSaving(true);
     setSearchError('');
     try {
-      if (sheetMode === 'search' && draft.providerPlaceId) {
+      // ── Edit existing place ──────────────────────────────────────
+      if (sheetEditingId) {
+        const existing = trip.places.find(p => p.id === sheetEditingId);
+        const updated: Place = {
+          visited:     false,
+          booked:      false,
+          ...(existing ?? {}),
+          id:          sheetEditingId,
+          nameHe:      nameHe || nameEn,
+          nameEn:      nameEn || undefined,
+          city:        draft.city ? normalizeCity(draft.city) : undefined,
+          type:        draft.type,
+          must:        draft.must,
+          address:     draft.address      || undefined,
+          description: draft.description  || undefined,
+          website:     draft.website      || undefined,
+          travelTime:  draft.travelTime   || undefined,
+          duration:    draft.duration     ? Number(draft.duration)    : undefined,
+          priceAdult:  draft.priceAdult   ? Number(draft.priceAdult)  : undefined,
+          priceChild:  draft.priceChild   ? Number(draft.priceChild)  : undefined,
+          imageUrl:    draft.imageUrl     || undefined,
+          providerPlaceId: draft.providerPlaceId,
+        };
+        onChange({ ...trip, places: trip.places.map(p => p.id === sheetEditingId ? updated : p) });
+        if (draft.imageUrl) {
+          setImageCache(c => ({ ...c, [sheetEditingId]: draft.imageUrl }));
+          attempted.current.delete(sheetEditingId);
+        }
+
+      // ── Add via Google Places search ─────────────────────────────
+      } else if (sheetMode === 'search' && draft.providerPlaceId) {
         await savePlaceIdea(trip.id, {
           providerPlaceId: draft.providerPlaceId,
           nameHe:      nameHe || nameEn,
@@ -666,8 +784,9 @@ export default function PlacesTab({ trip, onChange }: Props) {
           imageUrl:    draft.imageUrl   || undefined,
           must:        draft.must,
         });
+
+      // ── Manual add ───────────────────────────────────────────────
       } else {
-        // Manual add — save directly to trip
         const newPlace: Place = {
           id:          generateId(),
           nameHe:      nameHe || nameEn,
@@ -690,6 +809,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
       }
       dirtyFieldsRef.current = new Set();
       setSheetOpen(false);
+      setSheetEditingId(null);
     } catch (err) {
       const msg = (err as { message?: string }).message || '';
       setSearchError(msg.includes('כבר קיים') ? '⚠️ המקום כבר קיים בבנק הרעיונות' : 'שגיאה בשמירה — נסי שוב');
@@ -702,184 +822,188 @@ export default function PlacesTab({ trip, onChange }: Props) {
   return (
     <div className="places-tab" dir="rtl" onClick={() => setCalPickerId(null)}>
 
-      {/* ── MAIN TABS: אטרקציות / אוכל ── */}
-      <div className="exp-subtab-nav places-main-tabs">
-        <button
-          className={`exp-subtab-btn${mainTab === 'attractions' ? ' active' : ''}`}
-          onClick={() => setMainTab('attractions')}
-        >🎯 אטרקציות {attractionCount > 0 && <span className="places-tab-count">{attractionCount}</span>}</button>
-        <button
-          className={`exp-subtab-btn${mainTab === 'food' ? ' active' : ''}`}
-          onClick={() => setMainTab('food')}
-        >🍽️ אוכל {foodCount > 0 && <span className="places-tab-count">{foodCount}</span>}</button>
-      </div>
-
       {/* ── TOOLBAR ── */}
       <div className="tab-toolbar">
-        <div className="toolbar-right">
-          <span className="count-badge">{trip.places.length} רעיונות</span>
-          <div className="filter-chips">
-            {(['הכל', 'must'] as FilterKey[]).map(f => (
-              <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>
-                {f === 'must' ? '⭐ Must' : f}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="toolbar-left">
           <button className="btn-secondary btn-sm" onClick={openSheet}>🔍 חפש מקום</button>
           <button className="btn-primary btn-sm" onClick={openSheetManual}>+ הוסף ידנית</button>
         </div>
       </div>
 
-      {/* ── CITY GROUPS ── */}
-      {cityGroups.length === 0 ? (
+      {/* ── FILTER CHIPS ── */}
+      <div className="filter-chips-row">
+        {FILTER_CHIPS.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`chip ${filter === key ? 'chip-active' : ''}`}
+            onClick={() => { setFilter(key); setSelectedCity(null); }}
+          >
+            {label}
+            {key === 'הכל' && trip.places.length > 0 && (
+              <span className="chip-count">{trip.places.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── CITY SUB-CHIPS (shown when filter==='ערים') ── */}
+      {filter === 'ערים' && allCities.length > 0 && (
+        <div className="filter-chips-row filter-chips-cities">
+          <button
+            className={`chip chip-sm ${selectedCity === null ? 'chip-active' : ''}`}
+            onClick={() => setSelectedCity(null)}
+          >🌍 הכל</button>
+          {allCities.map(city => (
+            <button
+              key={city}
+              className={`chip chip-sm ${selectedCity === city ? 'chip-active' : ''}`}
+              onClick={() => setSelectedCity(city)}
+            >
+              📍 {city}
+              <span className="chip-count">
+                {trip.places.filter(p => normalizeCity(p.city || '') === city).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── CARDS GRID (flat, no city grouping) ── */}
+      {filteredPlaces.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">{mainTab === 'food' ? '🍽️' : '🎯'}</div>
-          <p>{mainTab === 'food' ? 'אין מסעדות / קפות עדיין' : 'אין אטרקציות עדיין'}. הוסיפי את הראשון!</p>
+          <div className="empty-icon">🗺️</div>
+          <p>{filter === 'הכל' ? 'אין מקומות עדיין — הוסיפי את הראשון!' : `אין מקומות בקטגוריה "${filter}"`}</p>
         </div>
       ) : (
-        cityGroups.map(({ city, places: cityPlaces }) => {
-          return (
-            <section key={city} className="city-group">
-              {/* City header */}
-              <div className="city-group-header">
-                <h2 className="city-title">{city}</h2>
-              </div>
+        <div className="idea-cards">
+          {filteredPlaces.map(place => {
+            const img = imageCache[place.id];
+            const isRefreshing = refreshingId === place.id;
+            const calOpen = calPickerId === place.id;
 
-              {/* Cards grid */}
-              <div className="idea-cards">
-                {cityPlaces.map(place => {
-                    const img = imageCache[place.id];
-                    const isRefreshing = refreshingId === place.id;
-                    const calOpen = calPickerId === place.id;
+            return (
+              <div
+                key={place.id}
+                className={`idea-card ${place.must ? 'idea-card--must' : ''}`}
+                onClick={() => setViewPlace(place)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Image */}
+                <div
+                  className="idea-card-img"
+                  style={img ? { backgroundImage: `url(${img})` } : {}}
+                >
+                  {!img && <span className="idea-card-img-placeholder">{TYPE_ICONS[place.type] || '📌'}</span>}
+                  <div className="idea-card-chips">
+                    <span className="idea-card-chip">{TYPE_ICONS[place.type]} {place.type}</span>
+                    {place.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
+                  </div>
+                  <button type="button" className="idea-card-del" onClick={e => { e.stopPropagation(); remove(place.id); }} title="מחק">✕</button>
+                </div>
 
-                    return (
-                      <div
-                        key={place.id}
-                        className={`idea-card ${place.must ? 'idea-card--must' : ''}`}
-                        onClick={() => setViewPlace(place)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {/* Image */}
-                        <div
-                          className="idea-card-img"
-                          style={img ? { backgroundImage: `url(${img})` } : {}}
-                        >
-                          {!img && <span className="idea-card-img-placeholder">{TYPE_ICONS[place.type] || '📌'}</span>}
-                          <div className="idea-card-chips">
-                            <span className="idea-card-chip">{TYPE_ICONS[place.type]} {place.type}</span>
-                            {place.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
-                          </div>
-                          <button type="button" className="idea-card-del" onClick={e => { e.stopPropagation(); remove(place.id); }} title="מחק">✕</button>
-                        </div>
+                {/* Body */}
+                <div className="idea-card-body">
+                  <div className="idea-card-names">
+                    <span className="idea-card-name-he">{place.nameHe}</span>
+                    {place.nameEn && <span className="idea-card-name-en">{place.nameEn}</span>}
+                  </div>
 
-                        {/* Body */}
-                        <div className="idea-card-body">
-                          <div className="idea-card-names">
-                            <span className="idea-card-name-he">{place.nameHe}</span>
-                            {place.nameEn && <span className="idea-card-name-en">{place.nameEn}</span>}
-                          </div>
+                  {place.description && (
+                    <p className="idea-card-desc">{place.description}</p>
+                  )}
 
-                          {place.description && (
-                            <p className="idea-card-desc">{place.description}</p>
-                          )}
+                  <div className="idea-card-meta">
+                    {place.duration != null && place.duration > 0 && (
+                      <span className="idea-card-meta-chip">🕒 {place.duration}ש'</span>
+                    )}
+                    {place.rating != null && (
+                      <span className="idea-card-meta-chip">⭐ {place.rating}</span>
+                    )}
+                    {place.travelTime && (
+                      <span className="idea-card-meta-chip">🚗 {place.travelTime}</span>
+                    )}
+                    {(place.priceAdult != null || place.priceChild != null) && (
+                      <span className="idea-card-meta-chip">
+                        💶{place.priceAdult != null ? ` מבוגר ₪${place.priceAdult}` : ''}
+                        {place.priceAdult != null && place.priceChild != null ? ' · ' : ''}
+                        {place.priceChild != null ? `ילד ₪${place.priceChild}` : ''}
+                      </span>
+                    )}
+                    {place.website
+                      ? <a href={place.website} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🔗 אתר</a>
+                      : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((place.nameEn || place.nameHe) + (place.city ? ' ' + place.city : ''))}`} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🍴 TripAdvisor</a>
+                    }
+                  </div>
 
-                          <div className="idea-card-meta">
-                            {place.duration != null && place.duration > 0 && (
-                              <span className="idea-card-meta-chip">🕒 {place.duration}ש'</span>
-                            )}
-                            {place.rating != null && (
-                              <span className="idea-card-meta-chip">⭐ {place.rating}</span>
-                            )}
-                            {place.travelTime && (
-                              <span className="idea-card-meta-chip">🚗 {place.travelTime}</span>
-                            )}
-                            {(place.priceAdult != null || place.priceChild != null) && (
-                              <span className="idea-card-meta-chip">
-                                💶{place.priceAdult != null ? ` מבוגר ₪${place.priceAdult}` : ''}
-                                {place.priceAdult != null && place.priceChild != null ? ' · ' : ''}
-                                {place.priceChild != null ? `ילד ₪${place.priceChild}` : ''}
-                              </span>
-                            )}
-                            {place.website
-                              ? <a href={place.website} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🔗 אתר</a>
-                              : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((place.nameEn || place.nameHe) + (place.city ? ' ' + place.city : ''))}`} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🍴 TripAdvisor</a>
-                            }
-                          </div>
+                  {/* Footer */}
+                  <div className="idea-card-footer">
+                    <div className="idea-card-actions">
 
-                          {/* Footer */}
-                          <div className="idea-card-footer">
-                            <div className="idea-card-actions">
+                      {/* Must ⭐ */}
+                      <button
+                        type="button"
+                        className={`idea-card-btn ${place.must ? 'on' : ''}`}
+                        onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
+                        title="Must"
+                      >{place.must ? '⭐' : '☆'}</button>
 
-                              {/* Must ⭐ */}
-                              <button
-                                type="button"
-                                className={`idea-card-btn ${place.must ? 'on' : ''}`}
-                                onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
-                                title="Must"
-                              >{place.must ? '⭐' : '☆'}</button>
+                      {/* Refresh 🔄 */}
+                      <button
+                        type="button"
+                        className="idea-card-btn idea-card-btn--refresh"
+                        onClick={e => { e.stopPropagation(); handleRefresh(place); }}
+                        disabled={isRefreshing}
+                        title="רענן פרטים"
+                      >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
 
-                              {/* Refresh 🔄 */}
-                              <button
-                                type="button"
-                                className="idea-card-btn idea-card-btn--refresh"
-                                onClick={e => { e.stopPropagation(); handleRefresh(place); }}
-                                disabled={isRefreshing}
-                                title="רענן פרטים"
-                              >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
+                      {/* Add to calendar 📅 */}
+                      <div className="cal-btn-wrap" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`idea-card-btn idea-card-btn--cal ${calOpen ? 'on' : ''}`}
+                          onClick={e => { e.stopPropagation(); setCalPickerId(calOpen ? null : place.id); }}
+                          title="הכנס ללוח שנה"
+                        >📅</button>
 
-                              {/* Add to calendar 📅 — with date picker */}
-                              <div className="cal-btn-wrap" onClick={e => e.stopPropagation()}>
+                        {calOpen && tripDates.length > 0 && (
+                          <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
+                            <div className="cal-date-picker-title">בחרי תאריך</div>
+                            <div className="cal-date-list">
+                              {tripDates.map(date => (
                                 <button
+                                  key={date}
                                   type="button"
-                                  className={`idea-card-btn idea-card-btn--cal ${calOpen ? 'on' : ''}`}
-                                  onClick={e => { e.stopPropagation(); setCalPickerId(calOpen ? null : place.id); }}
-                                  title="הכנס ללוח שנה"
-                                >📅</button>
-
-                                {calOpen && tripDates.length > 0 && (
-                                  <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
-                                    <div className="cal-date-picker-title">בחרי תאריך</div>
-                                    <div className="cal-date-list">
-                                      {tripDates.map(date => (
-                                        <button
-                                          key={date}
-                                          type="button"
-                                          className="cal-date-btn"
-                                          onClick={() => handleAddToCalendar(place, date)}
-                                        >
-                                          {fmtDateLabel(date)}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                                {calOpen && tripDates.length === 0 && (
-                                  <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
-                                    <div className="cal-date-picker-title">אין תאריכים לטיול</div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Edit ✏️ */}
-                              <button
-                                type="button"
-                                className="idea-card-btn idea-card-edit"
-                                onClick={e => { e.stopPropagation(); openEdit(place); }}
-                                title="ערוך"
-                              >✏️</button>
-
+                                  className="cal-date-btn"
+                                  onClick={() => handleAddToCalendar(place, date)}
+                                >
+                                  {fmtDateLabel(date)}
+                                </button>
+                              ))}
                             </div>
                           </div>
-                        </div>
+                        )}
+                        {calOpen && tripDates.length === 0 && (
+                          <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
+                            <div className="cal-date-picker-title">אין תאריכים לטיול</div>
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
+
+                      {/* Edit ✏️ */}
+                      <button
+                        type="button"
+                        className="idea-card-btn idea-card-edit"
+                        onClick={e => { e.stopPropagation(); openSheetEdit(place); }}
+                        title="ערוך"
+                      >✏️</button>
+
+                    </div>
+                  </div>
                 </div>
-            </section>
-          );
-        })
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* ── VIEW MODAL (read-only) ── */}
@@ -906,7 +1030,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   {vp.nameEn && <div style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 2 }}>{vp.nameEn}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="place-modal-close" onClick={() => { setViewPlace(null); openEdit(vp); }} title="עריכה">✏️</button>
+                  <button type="button" className="place-modal-close" onClick={() => openSheetEdit(vp)} title="עריכה">✏️</button>
                   <button type="button" className="place-modal-close" onClick={() => setViewPlace(null)} title="סגור">✕</button>
                 </div>
               </div>
@@ -1262,7 +1386,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     onClick={handleSheetSave}
                     disabled={sheetSaving}
                   >
-                    {sheetSaving ? <><span className="spin">⟳</span> שומר...</> : 'שמור בבנק'}
+                    {sheetSaving ? <><span className="spin">⟳</span> שומר...</> : sheetEditingId ? 'עדכן מקום' : 'שמור בבנק'}
                   </button>
                   <button
                     className="pls-btn-refresh"
