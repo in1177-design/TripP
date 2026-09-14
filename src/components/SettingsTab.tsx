@@ -479,18 +479,38 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                       : <span>{ini}</span>}
                   </div>
 
-                  {/* 2nd → type select — disabled in Design 3 (locked state) */}
-                  <select
-                    className="trv-type-select"
-                    value={t.type || 'adult'}
-                    disabled={showLockedPanel}
-                    onChange={e => updateTravelerType(i, e.target.value as 'adult' | 'child')}
-                  >
-                    <option value="adult">מבוגר</option>
-                    <option value="child">ילד</option>
-                  </select>
+                  {/* trv-card-meta: type-select + age-group.
+                      Desktop → display:contents (items flow in main row).
+                      Mobile  → display:flex second row (avoids overflow). */}
+                  <div className="trv-card-meta">
+                    {/* type select — disabled in Design 3 (locked state) */}
+                    <select
+                      className="trv-type-select"
+                      value={t.type || 'adult'}
+                      disabled={showLockedPanel}
+                      onChange={e => updateTravelerType(i, e.target.value as 'adult' | 'child')}
+                    >
+                      <option value="adult">מבוגר</option>
+                      <option value="child">ילד</option>
+                    </select>
 
-                  {/* 3rd → name input — disabled in Design 3 (locked state) */}
+                    {/* age counter (child only) */}
+                    {isChild && (
+                      <div className="trv-age-group">
+                        <button
+                          className="trv-age-circle"
+                          onClick={() => updateTraveler(i, 'age', Math.max(0, (t.age ?? 0) - 1))}
+                        >−</button>
+                        <span className="trv-age-num">{t.age ?? 0}</span>
+                        <button
+                          className="trv-age-circle"
+                          onClick={() => updateTraveler(i, 'age', Math.min(16, (t.age ?? 0) + 1))}
+                        >+</button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* name input — disabled in Design 3 (locked state) */}
                   <input
                     className="trv-name-input"
                     placeholder={`מטייל ${i + 1}`}
@@ -499,38 +519,23 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                     onChange={e => updateTraveler(i, 'name', e.target.value)}
                   />
 
-                  {/* 4th → age counter (child only, left of name) */}
-                  {isChild && (
-                    <div className="trv-age-group">
-                      <button
-                        className="trv-age-circle"
-                        onClick={() => updateTraveler(i, 'age', Math.max(0, (t.age ?? 0) - 1))}
-                      >−</button>
-                      <span className="trv-age-num">{t.age ?? 0}</span>
-                      <button
-                        className="trv-age-circle"
-                        onClick={() => updateTraveler(i, 'age', Math.min(16, (t.age ?? 0) + 1))}
-                      >+</button>
-                    </div>
-                  )}
-
                   {/* Action area — states:
                       Admin                → admin badge
-                      showLockedPanel      → "שותף בהצלחה ✓" green (Design 3, always visible for participants)
-                      pending success      → "שותף בהצלחה ✓" green (just sent pending invite)
-                      isOpen + edit mode   → muted share button (Design 2, click = close)
-                      default              → dark share button (Design 1, click = open)
+                      showLockedPanel      → "שותף בהצלחה ✓" green (Design 3)
+                      pending success      → "שותף בהצלחה ✓" green (just sent)
+                      isOpen + edit mode   → muted share button (Design 2)
+                      default              → dark share button (Design 1)
                   */}
                   {adminCard ? (
                     <span className="trv-admin-badge">אדמין</span>
                   ) : showLockedPanel ? (
                     /* Design 3 — permanently visible ✓ + remove button */
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <div className="trv-success-group">
                       <div className="trv-share-success-inline">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <polyline points="20 6 9 17 4 12" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
-                        <span>שותף בהצלחה</span>
+                        <span>שותף</span>
                       </div>
                       {isOwner && (
                         <button

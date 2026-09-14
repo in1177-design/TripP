@@ -1698,24 +1698,43 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .settings-root { padding: 12px; }
   .settings-section { padding: 14px 14px; }
   .settings-row { flex-wrap: wrap; }
-  .trv-card { padding: 12px; }
-  .trv-card-row { gap: 8px; }
 
-  /* Traveler card top row: shrink fixed items so name has room */
-  .trv-avatar-lg { width: 42px; height: 42px; font-size: 1rem; flex-shrink: 0; }
-  .trv-type-select { width: 70px; font-size: .78rem; padding: 6px 4px; }
+  /* Traveler card: 2-row layout on mobile
+     Row 1: avatar | name-input | action
+     Row 2: type-select | age-group (via trv-card-meta)        */
+  .trv-card { padding: 12px; overflow: hidden; }
+  .trv-card-row { gap: 8px; flex-wrap: wrap; }
+
+  /* Avatar: smaller, stays in row 1 */
+  .trv-avatar-lg { width: 40px; height: 40px; font-size: .95rem; flex-shrink: 0; order: 1; }
+
+  /* trv-card-meta on mobile: becomes its own flex row (full width, below row 1) */
+  .trv-card-meta {
+    display: flex; align-items: center; gap: 8px;
+    order: 10;            /* push BELOW avatar/name/action (orders 1–5) */
+    flex: 0 0 100%;       /* take full width → wraps to next line */
+    margin-top: 2px;
+  }
+  .trv-type-select { width: 80px; font-size: .82rem; padding: 6px 4px; }
+
+  /* Name input: stays in row 1 between avatar and action */
+  .trv-name-input { order: 2; min-width: 0; flex: 1; }
+
+  /* Action area stays in row 1 at the end */
+  .trv-admin-badge { order: 3; }
+  .trv-success-group { order: 3; flex-shrink: 1; gap: 4px; }
+  .trv-share-success-inline { font-size: .8rem; gap: 3px; white-space: nowrap; flex-shrink: 1; }
+  .trv-share-success-inline span { overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+  .trv-share-btn { order: 3; }
 
   /* Share row: email full width on first row, role+button on second row */
   .trv-share-row { flex-wrap: wrap; gap: 8px; }
-  .trv-share-row .trv-name-input { flex: 0 0 100%; }          /* email → full width */
-  .trv-share-row .trv-type-select { flex: 1; width: auto; }   /* role → fill remaining */
+  .trv-share-row .trv-name-input { flex: 0 0 100%; order: 0; }   /* email → full width */
+  .trv-share-row .trv-type-select { flex: 1; width: auto; order: 0; } /* role → fill */
   .trv-share-submit { flex: 1; min-width: 90px; }
   .trv-share-edit-btn { flex: 0 0 auto; }
 
-  /* "שותף בהצלחה" — allow wrapping, smaller text */
-  .trv-share-success-inline { white-space: normal; font-size: .82rem; gap: 4px; }
-
-  /* Age counter: smaller circles to save space */
+  /* Age counter: smaller circles */
   .trv-age-circle { width: 28px; height: 28px; }
   .trv-age-num { font-size: 1.1rem; min-width: 22px; }
 
@@ -2500,6 +2519,16 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 .trv-name-input:focus { outline: none; border-color: var(--ink); }
 .trv-name-input::placeholder { color: var(--ink-muted); }
+
+/* Card-meta: wraps type-select + age-group.
+   Desktop: display:contents → items flow directly in trv-card-row.
+   Mobile:  display:flex → shown as a second row below the main row. */
+.trv-card-meta { display: contents; }
+
+/* Success + remove container (replaces inline flexShrink:0 style) */
+.trv-success-group {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
 
 /* Type dropdown (100px, Figma style) */
 .trv-type-select {
