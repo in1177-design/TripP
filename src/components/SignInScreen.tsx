@@ -1,28 +1,59 @@
-import { useState } from 'react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useState, useEffect } from 'react';
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from 'firebase/auth';
 import { auth } from '../firebase';
 
 interface Props {
   onSignedIn?: () => void;
 }
 
+const provider = new GoogleAuthProvider();
+
+// Mobile browsers block popups — use redirect instead
+function isMobile() {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 export default function SignInScreen({ onSignedIn }: Props) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+
+  // Handle redirect result when user comes back from Google
+  useEffect(() => {
+    setLoading(true);
+    getRedirectResult(auth)
+      .then(result => {
+        if (result?.user) onSignedIn?.();
+      })
+      .catch(e => {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.includes('popup-closed') && !msg.includes('no-redirect')) {
+          setError('ההתחברות נכשלה. נסי שוב.');
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [onSignedIn]);
 
   async function handleGoogle() {
     setLoading(true);
     setError('');
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      onSignedIn?.();
+      if (isMobile()) {
+        // Redirect flow — page will reload and come back via getRedirectResult
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+        onSignedIn?.();
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      // User closed popup — not an error we surface
       if (!msg.includes('popup-closed-by-user')) {
         setError('ההתחברות נכשלה. נסי שוב.');
       }
-    } finally {
       setLoading(false);
     }
   }
