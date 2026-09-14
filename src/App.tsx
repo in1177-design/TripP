@@ -17,12 +17,15 @@ import './App.css';
 
 /* ── shared state lives here ── */
 function AppContent() {
-  const [trips,       setTrips]       = useState<Trip[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [authReady,   setAuthReady]   = useState(false);
-  const [uid,         setUid]         = useState<string | null>(null);
-  const [userPhoto,   setUserPhoto]   = useState<string | null>(null);
-  const [userName,    setUserName]    = useState<string | null>(null);
+  const [trips,           setTrips]           = useState<Trip[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [authReady,       setAuthReady]       = useState(false);
+  const [uid,             setUid]             = useState<string | null>(null);
+  const [userPhoto,       setUserPhoto]       = useState<string | null>(null);
+  const [userName,        setUserName]        = useState<string | null>(null);
+  const [sharedError,     setSharedError]     = useState<string | null>(null);
+  const [inviteStatus,    setInviteStatus]    = useState<'idle'|'running'|'done'|'error'>('idle');
+  const [inviteError,     setInviteError]     = useState('');
   const navigate = useNavigate();
 
   // 1. Wait for Firebase Auth to resolve
@@ -41,18 +44,30 @@ function AppContent() {
   useEffect(() => {
     if (!authReady || !uid) return;
     setLoading(true);
+    setSharedError(null);
 
-    // Accept any email-based pending invites for this user (fire-and-forget).
-    // The real-time listener below will pick up the new trip automatically.
-    if (auth.currentUser?.email) {
-      const fns = getFunctions(app, 'us-central1');
-      httpsCallable(fns, 'acceptPendingInvites')({}).catch(console.warn);
+    // Accept pending email invites — track status so user can see and retry on failure.
+    async function runAcceptInvites() {
+      if (!auth.currentUser?.email) return;
+      setInviteStatus('running');
+      setInviteError('');
+      try {
+        const fns = getFunctions(app, 'us-central1');
+        await httpsCallable(fns, 'acceptPendingInvites')({});
+        setInviteStatus('done');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setInviteStatus('error');
+        setInviteError(msg);
+        console.error('acceptPendingInvites failed:', msg);
+      }
     }
+    runAcceptInvites();
 
-    const unsub = subscribeTrips(data => {
-      setTrips(data);
-      setLoading(false);
-    });
+    const unsub = subscribeTrips(
+      data => { setTrips(data); setLoading(false); },
+      err  => setSharedError(err),
+    );
     return unsub;
   }, [authReady, uid]);
 
@@ -129,6 +144,34 @@ function AppContent() {
       )}
 
       <main className={`app-main${onTripView ? ' app-main--trip' : ''}`}>
+        {/* ── Status banners ── */}
+        {inviteStatus === 'error' && (
+          <div className="app-banner app-banner--error" role="alert">
+            ⚠️ שגיאה בקבלת הזמנות: {inviteError}
+            <button
+              className="app-banner-retry"
+              onClick={() => {
+                setInviteStatus('idle');
+                const fns = getFunctions(app, 'us-central1');
+                setInviteStatus('running');
+                setInviteError('');
+                httpsCallable(fns, 'acceptPendingInvites')({})
+                  .then(() => setInviteStatus('done'))
+                  .catch((e: unknown) => {
+                    setInviteStatus('error');
+                    setInviteError(e instanceof Error ? e.message : String(e));
+                  });
+              }}
+            >נסה שוב</button>
+          </div>
+        )}
+        {sharedError && (
+          <div className="app-banner app-banner--warn" role="alert">
+            ⚠️ {sharedError}
+            <button className="app-banner-retry" onClick={() => window.location.reload()}>רענן</button>
+          </div>
+        )}
+
         <Routes>
           <Route path="/" element={
             <TripList

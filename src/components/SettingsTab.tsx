@@ -194,21 +194,21 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       const data = await callShareTrip(trip.id, shareEmail.trim(), shareRole);
 
       if (data.pending) {
-        // Invite stored — user not yet in Firebase Auth
-        // Backfill email on the traveler card
+        // Invite stored — user not yet in Firebase Auth.
+        // They will see the trip automatically after signing in with this email.
         if (!travelersList[travelerIdx]?.email) {
           updateTraveler(travelerIdx, 'email', data.email);
         }
-        setShareSuccess('📨 הזמנה נשמרה — הטיול יופיע כשיתחברו לאפליקציה');
+        // 'pending' prefix lets the panel know to show the copy-link prompt
+        setShareSuccess('pending:' + data.email);
         setShareSentOnce(true);
         setForceEdit(false);
       } else {
-        // User already registered — add as participant immediately
+        // User already registered — access granted immediately.
         const newP: TripParticipant = {
           uid: data.uid!, email: data.email, displayName: data.displayName!, role: shareRole,
         };
         const existing = participants.filter(p => p.uid !== data.uid);
-        // BUG FIX: spread form.travelersList so unsaved edits on other cards aren't lost
         onChange({
           ...trip,
           travelersList:   form.travelersList,
@@ -218,7 +218,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
         if (!travelersList[travelerIdx]?.email) {
           updateTraveler(travelerIdx, 'email', data.email);
         }
-        setShareSuccess('✅ שותף בהצלחה');
+        setShareSuccess('confirmed');
         setShareSentOnce(true);
         setForceEdit(false);
       }
@@ -542,12 +542,12 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                       )}
                     </div>
                   ) : isOpen && (shareSuccess || isLocked) ? (
-                    /* Pending invite sent — green text */
+                    /* Just sent (pending or confirmed) — show appropriate label */
                     <div className="trv-share-success-inline">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <polyline points="20 6 9 17 4 12" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
-                      <span>שותף בהצלחה</span>
+                      <span>{shareSuccess?.startsWith('pending:') ? 'הזמנה נשמרה' : 'שותף בהצלחה'}</span>
                     </div>
                   ) : isOpen ? (
                     /* Design 2 top row — muted share button (click = close panel) */
@@ -651,22 +651,28 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                         </button>
                       </div>
                     )}
+                    {/* Pending invite — explain next step + copy link */}
+                    {shareSuccess?.startsWith('pending:') && (
+                      <div className="trv-share-pending-wrap">
+                        <p className="trv-share-pending-msg">
+                          📨 הזמנה ממתינה — יש להתחבר לאפליקציה עם <strong dir="ltr">{shareSuccess.slice('pending:'.length)}</strong>
+                        </p>
+                        <button
+                          className="trv-copy-link-btn"
+                          onClick={() => {
+                            navigator.clipboard.writeText('https://in1177-design.github.io/TripP/').then(() => {
+                              setCopiedAppLink(true);
+                              setTimeout(() => setCopiedAppLink(false), 2500);
+                            });
+                          }}
+                        >
+                          {copiedAppLink ? '✓ הקישור הועתק!' : '🔗 העתק קישור לאפליקציה'}
+                        </button>
+                      </div>
+                    )}
                     {shareError && (
                       <div className="trv-share-error-wrap">
                         <p className="trv-share-error">{shareError}</p>
-                        {shareError.includes('עדיין לא נרשם') && (
-                          <button
-                            className="trv-copy-link-btn"
-                            onClick={() => {
-                              navigator.clipboard.writeText('https://in1177-design.github.io/TripP/').then(() => {
-                                setCopiedAppLink(true);
-                                setTimeout(() => setCopiedAppLink(false), 2500);
-                              });
-                            }}
-                          >
-                            {copiedAppLink ? '✓ הקישור הועתק!' : '🔗 העתק קישור לאפליקציה'}
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>

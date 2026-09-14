@@ -652,36 +652,63 @@ export const acceptPendingInvites = onCall(
 
     if (inviteSnaps.empty) return { accepted: 0 };
 
-    // 3. Accept each invite: add to trip participants, then delete the invite doc
+    // 3. Accept each invite atomically: add participant + delete invite in one transaction.
+    //    Using a transaction prevents duplicate entries if the function runs twice.
     let accepted = 0;
     await Promise.all(inviteSnaps.docs.map(async snap => {
-      const invite = snap.data() as { tripId: string; role: 'editor' | 'viewer' };
-      const tripRef  = db.doc(`trips/${invite.tripId}`);
-      const tripSnap = await tripRef.get();
+      const invite = snap.data() as { tripId: string; role: 'editor' | 'viewer'; email?: string };
 
-      if (!tripSnap.exists) {
-        await snap.ref.delete(); // stale invite — clean up
+      // Extra validation: invite email must match the signed-in user's verified email
+      if (invite.email && invite.email.toLowerCase() !== email.toLowerCase()) {
+        console.warn('acceptPendingInvites: email mismatch, skipping', invite.email, email);
         return;
       }
 
-      const tripData = tripSnap.data() as {
-        participants?:    Array<{ uid: string }>;
-        participantUids?: string[];
-      };
-      const existing = (tripData.participants ?? []).filter(p => p.uid !== uid);
-      const newP = {
-        uid,
-        email,
-        displayName: userRecord.displayName ?? email,
-        role:        invite.role,
-      };
+      const tripRef = db.doc(`trips/${invite.tripId}`);
 
-      await tripRef.update({
-        participants:    [...existing, newP],
-        participantUids: FieldValue.arrayUnion(uid),
-      });
-      await snap.ref.delete();
-      accepted++;
+      try {
+        await db.runTransaction(async tx => {
+          const [tripSnap, inviteSnap] = await Promise.all([
+            tx.get(tripRef),
+            tx.get(snap.ref),
+          ]);
+
+          // Invite already processed (idempotency)
+          if (!inviteSnap.exists) return;
+
+          if (!tripSnap.exists) {
+            tx.delete(snap.ref); // stale invite — clean up
+            return;
+          }
+
+          const tripData = tripSnap.data() as {
+            participants?:    Array<{ uid: string }>;
+            participantUids?: string[];
+          };
+
+          // Idempotent: skip if already a participant
+          const alreadyParticipant = (tripData.participantUids ?? []).includes(uid);
+
+          const existing = (tripData.participants ?? []).filter(p => p.uid !== uid);
+          const newP = {
+            uid,
+            email,
+            displayName: userRecord.displayName ?? email,
+            role:        invite.role,
+          };
+
+          tx.update(tripRef, {
+            participants:    [...existing, newP],
+            participantUids: FieldValue.arrayUnion(uid),
+          });
+          tx.delete(snap.ref);
+
+          if (!alreadyParticipant) accepted++;
+        });
+      } catch (txErr) {
+        console.error('acceptPendingInvites transaction failed for trip', invite.tripId, txErr);
+        // Don't rethrow — try remaining invites
+      }
     }));
 
     return { accepted };

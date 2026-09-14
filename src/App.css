@@ -1602,6 +1602,28 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 /* ============================================================
    LOADING
    ============================================================ */
+
+/* ── Status banners (invite error / shared-trips error) ── */
+.app-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; font-size: .85rem; line-height: 1.4;
+}
+.app-banner--error { background: rgba(231,76,60,.12); color: #c0392b; border-bottom: 1px solid rgba(231,76,60,.2); }
+.app-banner--warn  { background: rgba(243,156,18,.12); color: #7d5c00; border-bottom: 1px solid rgba(243,156,18,.2); }
+.app-banner-retry {
+  margin-inline-start: auto;
+  background: none; border: 1px solid currentColor; border-radius: 6px;
+  padding: 3px 10px; font-size: .82rem; cursor: pointer; color: inherit;
+}
+.app-banner-retry:hover { opacity: .8; }
+
+:root[data-theme="dark"] .app-banner--error { color: #ff9090; }
+:root[data-theme="dark"] .app-banner--warn  { color: #ffd080; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-banner--error { color: #ff9090; }
+  :root:not([data-theme="light"]) .app-banner--warn  { color: #ffd080; }
+}
+
 .loading-screen {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 100vh; gap: 16px; color: var(--ink-muted);
@@ -2601,6 +2623,19 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 
 .trv-share-success { font-size: .9rem; font-weight: 700; color: #2ecc71; margin: 0; }
+/* Pending invite explanation */
+.trv-share-pending-wrap {
+  display: flex; flex-direction: column; gap: 6px;
+  background: rgba(46,204,113,.08);
+  border: 1px solid rgba(46,204,113,.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+.trv-share-pending-msg {
+  font-size: .82rem; color: var(--ink); margin: 0; line-height: 1.5;
+}
+
 .trv-share-error-wrap { display: flex; flex-direction: column; gap: 6px; }
 .trv-share-error      { font-size: .82rem; color: var(--danger); margin: 0; }
 .trv-copy-link-btn    {

@@ -46,12 +46,19 @@ export async function deleteTrip(id: string): Promise<void> {
 
 /**
  * Subscribe to all trips owned by or shared with the current user.
- * Falls back to a simple owner-only query if composite indexes aren't ready yet.
+ *
+ * @param onTrips   Called every time the trip list changes.
+ * @param onSharedError  Called when the shared-trips query fails (index not ready,
+ *                  permission denied, etc.).  Owned trips are still delivered.
+ *                  Pass null to clear a previous error.
  */
-export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
+export function subscribeTrips(
+  onTrips: (trips: Trip[]) => void,
+  onSharedError?: (error: string | null) => void,
+): Unsubscribe {
   const uid = auth.currentUser?.uid;
   if (!uid) {
-    callback([]);
+    onTrips([]);
     return () => {};
   }
 
@@ -61,13 +68,14 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
   let sharedReady = false;
 
   function merge() {
+    if (!ownedReady || !sharedReady) return;
     const seen = new Set<string>();
     const all: Trip[] = [];
     for (const t of [...ownedTrips, ...sharedTrips]) {
       if (!seen.has(t.id)) { seen.add(t.id); all.push(t); }
     }
     all.sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
-    callback(all);
+    onTrips(all);
   }
 
   // Query 1: trips owned by this user
@@ -82,19 +90,17 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
     snap => {
       ownedTrips = snap.docs.map(d => d.data() as Trip);
       ownedReady = true;
-      if (!sharedReady) sharedReady = true; // unblock merge if shared never resolves
       merge();
     },
     err => {
-      console.warn('subscribeTrips owned query error:', err.code, err.message);
+      console.error('subscribeTrips owned query error:', err.code, err.message);
       ownedReady = true;
-      // Do NOT reset sharedTrips — only mark ready so merge() unblocks
-      if (!sharedReady) sharedReady = true;
       merge();
     },
   );
 
   // Query 2: trips shared with this user
+  // Requires composite index: participantUids (array-contains) + startDate (desc)
   const qShared = query(
     collection(db, TRIPS),
     where('participantUids', 'array-contains', uid),
@@ -106,14 +112,21 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
     snap => {
       sharedTrips = snap.docs.map(d => d.data() as Trip);
       sharedReady = true;
-      if (!ownedReady) ownedReady = true;
+      onSharedError?.(null); // clear any previous error
       merge();
     },
     err => {
-      console.warn('subscribeTrips shared query error:', err.code, err.message);
+      // Surface the error so the UI can tell the user what went wrong.
+      // 'failed-precondition' means the composite index isn't ready yet.
+      const msg = err.code === 'failed-precondition'
+        ? 'האינדקס של Firestore עדיין לא מוכן — הטיולים המשותפים ייטענו בקרוב. רענן את הדף.'
+        : err.code === 'permission-denied'
+        ? 'אין הרשאה לטעון טיולים משותפים.'
+        : `שגיאה בטעינת טיולים משותפים (${err.code})`;
+      console.error('subscribeTrips shared query error:', err.code, err.message);
+      onSharedError?.(msg);
       sharedReady = true;
-      // Do NOT reset ownedTrips — only mark ready so merge() unblocks
-      if (!ownedReady) ownedReady = true;
+      // Keep sharedTrips empty — do NOT clear ownedTrips
       merge();
     },
   );
