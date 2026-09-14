@@ -200,6 +200,283 @@ export const enrichPlace = onCall(
   },
 );
 
+// ── Place Search — Phase 1 (Mock Data) ───────────────────────────────────────
+
+interface MockPlace {
+  providerPlaceId: string;
+  name: string;
+  nameHe?: string;
+  address: string;
+  category: string;
+  location: { lat: number; lng: number };
+  description?: string;
+  website?: string;
+  imageUrls?: string[];
+}
+
+const MOCK_PLACES: MockPlace[] = [
+  // Poland — Kraków
+  { providerPlaceId: 'mock_krakow_wawel', name: 'Wawel Royal Castle', nameHe: 'טירת וואוול', address: 'Wawel 5, 31-001 Kraków', category: 'אטרקציה', location: { lat: 50.0542, lng: 19.9355 }, website: 'https://wawel.krakow.pl', description: 'Medieval castle complex on Wawel Hill' },
+  { providerPlaceId: 'mock_krakow_pod_aniolami', name: 'Pod Aniolami', address: 'ul. Grodzka 35, 31-001 Kraków', category: 'מסעדה', location: { lat: 50.0591, lng: 19.9382 }, description: 'Traditional Polish cuisine in a historic cellar' },
+  { providerPlaceId: 'mock_krakow_old_town', name: 'Stare Miasto (Old Town)', nameHe: 'העיר העתיקה של קרקוב', address: 'Rynek Główny, Kraków', category: 'שכונה', location: { lat: 50.0614, lng: 19.9372 }, description: 'Historic city center with the main market square' },
+  { providerPlaceId: 'mock_krakow_salt_mine', name: 'Wieliczka Salt Mine', nameHe: "מכרה המלח וייליצ'קה", address: 'Park Kingi 1, 32-020 Wieliczka', category: 'אטרקציה', location: { lat: 49.9838, lng: 20.0548 }, website: 'https://wieliczka-saltmine.com', description: 'UNESCO World Heritage underground salt mine' },
+  { providerPlaceId: 'mock_krakow_kazimierz', name: 'Kazimierz Jewish Quarter', nameHe: 'רובע קזימייז', address: 'Kazimierz, Kraków', category: 'שכונה', location: { lat: 50.0515, lng: 19.9440 }, description: 'Historic Jewish quarter with synagogues and galleries' },
+  { providerPlaceId: 'mock_krakow_market', name: 'Stary Kleparz Market', nameHe: "שוק סטארי קלפאז'", address: 'ul. Stary Kleparz, Kraków', category: 'שוק', location: { lat: 50.0671, lng: 19.9400 }, description: 'Traditional outdoor food and flower market' },
+  { providerPlaceId: 'mock_krakow_hawelka', name: 'Hawelka', address: 'Rynek Główny 34, 31-010 Kraków', category: 'מסעדה', location: { lat: 50.0618, lng: 19.9378 }, website: 'https://hawelka.pl', description: 'Iconic restaurant on the Main Market Square since 1876' },
+  { providerPlaceId: 'mock_krakow_cloth_hall', name: 'Cloth Hall (Sukiennice)', nameHe: 'אולם הבד', address: 'Rynek Główny 1-3, 31-042 Kraków', category: 'שוק', location: { lat: 50.0616, lng: 19.9375 }, description: 'Gothic trading hall in the center of the main square' },
+  { providerPlaceId: 'mock_krakow_schindler', name: "Schindler's Factory Museum", nameHe: "מפעל שינדלר", address: 'ul. Lipowa 4, 30-702 Kraków', category: 'מוזיאון', location: { lat: 50.0474, lng: 19.9612 }, website: 'https://muzeumkrakowa.pl', description: 'Museum dedicated to WWII Kraków history' },
+  // Israel
+  { providerPlaceId: 'mock_tlv_carmel', name: 'Carmel Market', nameHe: 'שוק הכרמל', address: 'Shuk HaCarmel, Tel Aviv', category: 'שוק', location: { lat: 32.0653, lng: 34.7663 }, description: 'Bustling outdoor market in Tel Aviv' },
+  { providerPlaceId: 'mock_tlv_jaffa', name: 'Jaffa Old City', nameHe: 'עיר עתיקה של יפו', address: 'Old Jaffa, Tel Aviv-Yafo', category: 'שכונה', location: { lat: 32.0531, lng: 34.7518 } },
+  { providerPlaceId: 'mock_tlv_habasta', name: 'HaBasta', nameHe: 'הבסטה', address: 'Hashomer St 4, Tel Aviv', category: 'מסעדה', location: { lat: 32.0657, lng: 34.7690 }, description: 'Popular farm-to-table restaurant near Carmel Market' },
+  // France — Paris
+  { providerPlaceId: 'mock_paris_eiffel', name: 'Eiffel Tower', nameHe: 'מגדל אייפל', address: 'Champ de Mars, 5 Av. Anatole France, 75007 Paris', category: 'אטרקציה', location: { lat: 48.8584, lng: 2.2945 }, website: 'https://www.toureiffel.paris' },
+  { providerPlaceId: 'mock_paris_louvre', name: 'Louvre Museum', nameHe: 'מוזיאון הלובר', address: 'Rue de Rivoli, 75001 Paris', category: 'מוזיאון', location: { lat: 48.8606, lng: 2.3376 }, website: 'https://www.louvre.fr' },
+  { providerPlaceId: 'mock_paris_comptoir', name: 'Le Comptoir du Relais', address: "9 Carrefour de l'Odéon, 75006 Paris", category: 'מסעדה', location: { lat: 48.8515, lng: 2.3401 }, description: 'Classic French bistro in Saint-Germain' },
+  // Italy — Rome
+  { providerPlaceId: 'mock_rome_colosseum', name: 'Colosseum', nameHe: 'הקולוסיאום', address: 'Piazza del Colosseo, 1, 00184 Roma RM', category: 'אטרקציה', location: { lat: 41.8902, lng: 12.4922 }, website: 'https://www.parcocolosseo.it' },
+  { providerPlaceId: 'mock_rome_vatican', name: 'Vatican Museums', nameHe: 'מוזיאוני הוותיקן', address: 'Viale Vaticano, 00165 Roma RM', category: 'מוזיאון', location: { lat: 41.9065, lng: 12.4534 } },
+  { providerPlaceId: 'mock_rome_da_enzo', name: 'Da Enzo al 29', address: 'Via dei Vascellari, 29, 00153 Roma RM', category: 'מסעדה', location: { lat: 41.8879, lng: 12.4703 }, description: 'Trattoria in Trastevere neighborhood' },
+  // Spain — Barcelona
+  { providerPlaceId: 'mock_bcn_sagrada', name: 'Sagrada Família', nameHe: 'סגרדה פמיליה', address: 'C/ de Mallorca, 401, 08013 Barcelona', category: 'אטרקציה', location: { lat: 41.4036, lng: 2.1744 }, website: 'https://sagradafamilia.org' },
+  { providerPlaceId: 'mock_bcn_boqueria', name: 'La Boqueria Market', nameHe: 'שוק לה בוקריה', address: 'La Rambla, 91, 08001 Barcelona', category: 'שוק', location: { lat: 41.3817, lng: 2.1718 }, description: 'Famous public market on La Rambla' },
+  // Netherlands — Amsterdam
+  { providerPlaceId: 'mock_ams_rijks', name: 'Rijksmuseum', nameHe: 'ריקסמוזיאום', address: 'Museumstraat 1, 1071 XX Amsterdam', category: 'מוזיאון', location: { lat: 52.3600, lng: 4.8852 }, website: 'https://www.rijksmuseum.nl' },
+  { providerPlaceId: 'mock_ams_vondelpark', name: 'Vondelpark', nameHe: 'פארק פונדל', address: 'Vondelpark, 1071 Amsterdam', category: 'פארק', location: { lat: 52.3579, lng: 4.8687 }, description: "Amsterdam's largest and most famous park" },
+  // Greece — Athens
+  { providerPlaceId: 'mock_ath_acropolis', name: 'Acropolis of Athens', nameHe: 'האקרופוליס של אתונה', address: 'Acropolis, Athens 105 58, Greece', category: 'אטרקציה', location: { lat: 37.9715, lng: 23.7267 }, website: 'https://www.theacropolismuseum.gr' },
+  { providerPlaceId: 'mock_ath_monastiraki', name: 'Monastiraki Flea Market', nameHe: 'שוק מונסטירקי', address: 'Platia Monastirakiou, Athina 105 55', category: 'שוק', location: { lat: 37.9762, lng: 23.7243 } },
+];
+
+function mockSearch(query: string): MockPlace[] {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  return MOCK_PLACES.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.nameHe && p.nameHe.includes(q)) ||
+    p.address.toLowerCase().includes(q) ||
+    p.category.includes(q) ||
+    (p.description && p.description.toLowerCase().includes(q))
+  ).slice(0, 3);
+}
+
+function getMockById(id: string): MockPlace | undefined {
+  return MOCK_PLACES.find(p => p.providerPlaceId === id);
+}
+
+/** Verify user has at least viewer access to a trip. Returns tripData. */
+async function verifyTripAccess(
+  uid: string,
+  tripId: string,
+  requireEditor = false,
+): Promise<Record<string, unknown>> {
+  const tripSnap = await db.doc(`trips/${tripId}`).get();
+  if (!tripSnap.exists) throw new HttpsError('not-found', 'הטיול לא נמצא.');
+  const td = tripSnap.data() as {
+    ownerId?: string;
+    participantUids?: string[];
+    participants?: Array<{ uid: string; role: string }>;
+  };
+  const isOwner = td.ownerId === uid;
+  const participant = (td.participants ?? []).find(p => p.uid === uid);
+  const hasAccess = isOwner || !!participant || (td.participantUids ?? []).includes(uid);
+  if (!hasAccess) throw new HttpsError('permission-denied', 'אין גישה לטיול זה.');
+  if (requireEditor && !isOwner && participant?.role !== 'editor') {
+    throw new HttpsError('permission-denied', 'נדרשת הרשאת עריכה.');
+  }
+  return td as Record<string, unknown>;
+}
+
+const PLACES_CORS = [
+  'https://in1177-design.github.io',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+];
+
+// ── searchPlaces ──────────────────────────────────────────────────────────────
+
+export const searchPlaces = onCall(
+  { maxInstances: 10, timeoutSeconds: 10, cors: PLACES_CORS },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
+    const { tripId, query, city } = request.data as { tripId: string; query?: string; city?: string };
+    if (!tripId || !query?.trim()) throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
+
+    await verifyTripAccess(request.auth.uid, tripId);
+
+    const searchTerm = [query.trim(), city?.trim()].filter(Boolean).join(' ');
+    const results = mockSearch(searchTerm);
+
+    return {
+      requestId: String(Date.now()),
+      results: results.map(p => ({
+        providerPlaceId: p.providerPlaceId,
+        name: p.name,
+        address: p.address,
+        category: p.category,
+        location: p.location,
+      })),
+    };
+  },
+);
+
+// ── getPlaceDetails ───────────────────────────────────────────────────────────
+
+export const getPlaceDetails = onCall(
+  { secrets: [ANTHROPIC_KEY], maxInstances: 5, timeoutSeconds: 30, memory: '256MiB', cors: PLACES_CORS },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
+    if (request.auth.token.firebase?.sign_in_provider === 'anonymous') {
+      throw new HttpsError('permission-denied', 'נדרשת כניסה עם חשבון Google.');
+    }
+    const uid = request.auth.uid;
+    const { tripId, providerPlaceId } = request.data as { tripId: string; providerPlaceId: string };
+    if (!tripId || !providerPlaceId) throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
+
+    await verifyTripAccess(uid, tripId);
+
+    const place = getMockById(providerPlaceId);
+    if (!place) throw new HttpsError('not-found', 'המקום לא נמצא.');
+
+    await checkRateLimits(uid);
+
+    const apiKey = ANTHROPIC_KEY.value();
+    if (!apiKey) throw new HttpsError('internal', 'מפתח API חסר.');
+
+    // Use existing AI info from mock as defaults; call Claude only for Hebrew translation
+    let nameHe = place.nameHe || place.name;
+    let descriptionHe = place.description || '';
+    let categoryHe = place.category;
+
+    const prompt = `מקום: "${place.name}" (קטגוריה: ${place.category}), כתובת: ${place.address}.${place.description ? ` תיאור: ${place.description}` : ''}
+
+החזר JSON בלבד (ללא טקסט נוסף):
+{
+  "nameHe": "שם קצר ומדויק בעברית",
+  "descriptionHe": "תיאור קצר בעברית, משפט אחד",
+  "categoryHe": "אחד מ: אטרקציה, מסעדה, קפה, מוזיאון, שוק, פארק, שכונה, אחר"
+}`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type':      'application/json',
+          'x-api-key':         apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          messages:   [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const d = await res.json() as { content?: Array<{ text?: string }> };
+        const text = d.content?.[0]?.text ?? '';
+        const json = JSON.parse(text.replace(/```json|```/g, '').trim()) as Record<string, unknown>;
+        const VALID_TYPES = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
+        if (typeof json.nameHe === 'string' && json.nameHe.trim()) nameHe = json.nameHe.trim();
+        if (typeof json.descriptionHe === 'string') descriptionHe = json.descriptionHe.trim();
+        if (typeof json.categoryHe === 'string' && VALID_TYPES.includes(json.categoryHe as string)) {
+          categoryHe = json.categoryHe as string;
+        }
+      }
+    } catch { /* keep mock defaults on AI failure */ }
+
+    return {
+      providerPlaceId: place.providerPlaceId,
+      name:       place.name,
+      nameHe,
+      address:    place.address,
+      category:   categoryHe,
+      description: descriptionHe,
+      website:    place.website ?? null,
+      imageUrls:  place.imageUrls ?? [],
+    };
+  },
+);
+
+// ── savePlaceIdea ─────────────────────────────────────────────────────────────
+
+interface SavePlaceData {
+  tripId:          string;
+  providerPlaceId: string;
+  nameHe:          string;
+  nameEn?:         string;
+  address?:        string;
+  city?:           string;
+  category:        string;
+  description?:    string;
+  website?:        string;
+  imageUrl?:       string;
+  must?:           boolean;
+}
+
+export const savePlaceIdea = onCall(
+  { maxInstances: 10, timeoutSeconds: 15, cors: PLACES_CORS },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
+    const uid = request.auth.uid;
+    const data = request.data as SavePlaceData;
+
+    if (!data?.tripId || !data?.providerPlaceId || !data?.nameHe?.trim()) {
+      throw new HttpsError('invalid-argument', 'חסרים פרמטרים.');
+    }
+
+    const VALID_TYPES = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
+    const tripRef = db.doc(`trips/${data.tripId}`);
+
+    const savedPlace = await db.runTransaction(async tx => {
+      const tripSnap = await tx.get(tripRef);
+      if (!tripSnap.exists) throw new HttpsError('not-found', 'הטיול לא נמצא.');
+
+      const td = tripSnap.data() as {
+        ownerId?:         string;
+        participants?:    Array<{ uid: string; role: string }>;
+        participantUids?: string[];
+        places?:          Array<{ providerPlaceId?: string }>;
+      };
+
+      // Verify editor access inside transaction
+      const isOwner    = td.ownerId === uid;
+      const participant = (td.participants ?? []).find(p => p.uid === uid);
+      if (!isOwner && participant?.role !== 'editor') {
+        throw new HttpsError('permission-denied', 'נדרשת הרשאת עריכה.');
+      }
+
+      // Duplicate check
+      if ((td.places ?? []).some(p => p.providerPlaceId === data.providerPlaceId)) {
+        throw new HttpsError('already-exists', 'המקום כבר קיים בבנק הרעיונות.');
+      }
+
+      const newPlace = {
+        id:              db.collection('_').doc().id,
+        providerPlaceId: data.providerPlaceId,
+        nameHe:          data.nameHe.trim().slice(0, 200),
+        nameEn:          (data.nameEn  || '').trim().slice(0, 200),
+        address:         (data.address || '').trim().slice(0, 300),
+        city:            (data.city    || '').trim().slice(0, 100),
+        area:            '',
+        type:            VALID_TYPES.includes(data.category) ? data.category : 'אחר',
+        description:     (data.description || '').trim().slice(0, 500),
+        website:         (data.website || '').trim().slice(0, 300),
+        imageUrl:        (data.imageUrl || '').slice(0, 500),
+        must:            !!data.must,
+        visited:         false,
+        booked:          false,
+        duration:        2,
+      };
+
+      tx.update(tripRef, { places: [...(td.places ?? []), newPlace] });
+      return newPlace;
+    });
+
+    return { place: savedPlace };
+  },
+);
+
 // ── shareTrip ─────────────────────────────────────────────────────────────────
 
 interface ShareRequest {

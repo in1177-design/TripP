@@ -66,6 +66,7 @@ export interface Document {
 
 export interface Place {
   id: string;
+  providerPlaceId?: string; // provider ID (Google Places / mock) — used for dedup
   nameHe: string;
   nameEn?: string;
   city?: string;
