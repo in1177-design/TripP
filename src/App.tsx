@@ -16,18 +16,22 @@ import './App.css';
 
 /* ── shared state lives here ── */
 function AppContent() {
-  const [trips,     setTrips]     = useState<Trip[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [authReady, setAuthReady] = useState(false);
-  const [uid,       setUid]       = useState<string | null>(null);
+  const [trips,       setTrips]       = useState<Trip[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [authReady,   setAuthReady]   = useState(false);
+  const [uid,         setUid]         = useState<string | null>(null);
+  const [userPhoto,   setUserPhoto]   = useState<string | null>(null);
+  const [userName,    setUserName]    = useState<string | null>(null);
   const navigate = useNavigate();
 
   // 1. Wait for Firebase Auth to resolve
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       setUid(user?.uid ?? null);
+      setUserPhoto(user?.photoURL ?? null);
+      setUserName(user?.displayName ?? user?.email ?? null);
       setAuthReady(true);
-      if (!user) setLoading(false); // no user → stop showing spinner
+      if (!user) setLoading(false);
     });
     return unsub;
   }, []);
@@ -93,13 +97,22 @@ function AppContent() {
                   </button>
                 } />
               </Routes>
-              <button
-                className="signout-btn"
-                onClick={() => signOut(auth)}
-                title="יציאה"
-              >
-                יציאה
-              </button>
+              <div className="user-menu">
+                {userPhoto
+                  ? <img src={userPhoto} className="user-avatar" alt={userName ?? ''} referrerPolicy="no-referrer" />
+                  : <div className="user-avatar user-avatar--initials">
+                      {(userName?.[0] ?? '?').toUpperCase()}
+                    </div>
+                }
+                {userName && <span className="user-name">{userName.split(' ')[0]}</span>}
+                <button
+                  className="signout-btn"
+                  onClick={() => signOut(auth)}
+                  title="יציאה מהחשבון"
+                >
+                  יציאה
+                </button>
+              </div>
             </div>
           </div>
         </header>

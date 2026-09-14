@@ -2599,23 +2599,29 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   width: 100%;
   padding: 13px 20px;
   border-radius: 12px;
-  border: 1.5px solid var(--border-mid);
-  background: var(--surface);
-  color: var(--ink);
+  border: 1.5px solid #dadce0;
+  background: #fff;
+  color: #3c4043;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
   font-family: inherit;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 
 .signin-google-btn:hover:not(:disabled) {
-  background: var(--surface2);
-  border-color: var(--border-mid);
+  background: #f8f9fa;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+
+.signin-google-btn:active:not(:disabled) {
+  background: #f1f3f4;
+  box-shadow: none;
 }
 
 .signin-google-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.65;
   cursor: default;
 }
 
@@ -2773,19 +2779,55 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   gap: 12px;
 }
 
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid rgba(255,255,255,.3);
+  flex-shrink: 0;
+}
+
+.user-avatar--initials {
+  background: var(--yellow);
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,.85);
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .signout-btn {
   background: none;
-  border: 1px solid rgba(255,255,255,.35);
+  border: 1px solid rgba(255,255,255,.3);
   border-radius: 8px;
-  padding: 5px 12px;
-  font-size: 13px;
-  color: rgba(255,255,255,.75);
+  padding: 4px 11px;
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .signout-btn:hover {
   background: rgba(255,255,255,.1);
   color: #fff;
+  border-color: rgba(255,255,255,.5);
 }
