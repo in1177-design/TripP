@@ -61,6 +61,10 @@ function AppContent() {
     navigate('/', { replace: true });
   }
 
+  // Must call useLocation before any early returns (Rules of Hooks)
+  const location = useLocation();
+  const onTripView = /^\/trip\/[^/]+\/(?!edit)/.test(location.pathname);
+
   // Show sign-in screen when auth resolved but no user
   if (authReady && !uid) {
     return <SignInScreen />;
@@ -76,9 +80,6 @@ function AppContent() {
       </div>
     );
   }
-
-  const location = useLocation();
-  const onTripView = /^\/trip\/[^/]+\/(?!edit)/.test(location.pathname);
 
   return (
     <div className={`app${onTripView ? ' app--trip-view' : ''}`} dir="rtl">

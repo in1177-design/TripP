@@ -15,7 +15,9 @@ export interface Traveler {
   id: string;
   name: string;
   email: string;
-  avatar?: string; // image URL; if absent, initials are shown
+  type?: 'adult' | 'child'; // default: adult
+  age?: number;              // 0–16, only for children
+  avatar?: string;           // image URL; if absent, initials are shown
 }
 
 export type TripRole = 'owner' | 'editor' | 'viewer';

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler, TripParticipant } from '../types';
 import { generateId } from '../storage';
@@ -21,9 +21,18 @@ async function callRemove(tripId: string, participantUid: string) {
   await fn({ tripId, participantUid });
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: '👑 בעלים', editor: '✏️ עורך', viewer: '👁️ צופה',
-};
+// Share icon SVG (3 nodes connected)
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="4"  r="2.5" stroke="white" strokeWidth="1.8"/>
+      <circle cx="4"  cy="10" r="2.5" stroke="white" strokeWidth="1.8"/>
+      <circle cx="16" cy="16" r="2.5" stroke="white" strokeWidth="1.8"/>
+      <line x1="6.3" y1="8.8"  x2="13.7" y2="5.2"  stroke="white" strokeWidth="1.5"/>
+      <line x1="6.3" y1="11.2" x2="13.7" y2="14.8" stroke="white" strokeWidth="1.5"/>
+    </svg>
+  );
+}
 
 interface Props {
   trip:       Trip;
@@ -33,9 +42,8 @@ interface Props {
 
 const STYLES: TripStyle[]   = ['תרבות', 'טבע', 'עיר', 'חוף', 'הרפתקאות', 'קולינריה', 'משפחה'];
 const CURRENCIES             = ['ILS', 'EUR', 'USD', 'PLN', 'GBP'];
-// Currencies shown in the exchange-rates section (non-ILS)
 const RATE_CURRENCIES        = CURRENCIES.filter(c => c !== 'ILS');
-const AVATAR_PALETTE         = ['#14b8a6','#f59e0b','#8b5cf6','#ec4899','#3b82f6','#22c55e','#f97316','#64748b'];
+const AVATAR_PALETTE         = ['#4f46e5','#e91e8c','#f39c12','#2ecc71','#e74c3c','#3498db','#9b59b6','#1abc9c'];
 
 function emptyFlight(): Partial<Flight> {
   return { dir: 'out', flightNo: '', from: '', to: '', date: '', dep: '', arr: '' };
@@ -44,7 +52,7 @@ function emptyStay(): Partial<Stay> {
   return { name: '', checkIn: '', checkOut: '', status: 'planned', currency: 'PLN' };
 }
 function emptyTraveler(): Traveler {
-  return { id: generateId(), name: '', email: '' };
+  return { id: generateId(), name: '', email: '', type: 'adult' };
 }
 function syncList(existing: Traveler[], count: number): Traveler[] {
   const list = [...existing];
@@ -63,18 +71,21 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     f.travelersList = syncList(f.travelersList || [], f.travelers || 1);
     return f;
   });
-  const [saved,         setSaved]         = useState(false);
+  const [savedSection,  setSavedSection]  = useState<string | null>(null);
   const [showAddFlight, setShowAddFlight] = useState(false);
   const [showAddStay,   setShowAddStay]   = useState(false);
   const [newFlight,     setNewFlight]     = useState<Partial<Flight>>(emptyFlight());
   const [newStay,       setNewStay]       = useState<Partial<Stay>>(emptyStay());
 
-  // Sharing state
+  // Per-card share state
+  const [openShareIdx, setOpenShareIdx] = useState<number | null>(null);
   const [shareEmail,   setShareEmail]   = useState('');
   const [shareRole,    setShareRole]    = useState<'editor' | 'viewer'>('editor');
   const [shareLoading, setShareLoading] = useState(false);
-  const [shareError,   setShareError]   = useState('');
-  const [shareSuccess, setShareSuccess] = useState('');
+  const [shareError,      setShareError]      = useState('');
+  const [shareSuccess,    setShareSuccess]    = useState('');
+  const [copiedAppLink,   setCopiedAppLink]   = useState(false);
+  const shareSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isOwner      = auth.currentUser?.uid === trip.ownerId;
   const participants: TripParticipant[] = trip.participants ?? [];
@@ -83,9 +94,32 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   const stays         = form.stays         || [];
   const travelersList = form.travelersList || [];
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function isAdminCard(t: Traveler, idx: number): boolean {
+    if (!isOwner) return false;
+    const currentEmail = auth.currentUser?.email?.toLowerCase();
+    if (currentEmail && t.email.toLowerCase() === currentEmail) return true;
+    // Fallback: first card if no traveler's email matches the owner
+    if (idx === 0 && !travelersList.some(tv => tv.email.toLowerCase() === currentEmail)) return true;
+    return false;
+  }
+
+  function getParticipant(t: Traveler): TripParticipant | undefined {
+    if (!t.email) return undefined;
+    return participants.find(p => p.email.toLowerCase() === t.email.toLowerCase());
+  }
+
+  // ── Form ───────────────────────────────────────────────────────────────────
+
   function set<K extends keyof Trip>(key: K, val: Trip[K]) {
     setForm(f => ({ ...f, [key]: val }));
-    setSaved(false);
+  }
+
+  function saveSection(name: string) {
+    onChange(stripUndefined(form) as Trip);
+    setSavedSection(name);
+    setTimeout(() => setSavedSection(null), 2500);
   }
 
   function toggleStyle(s: TripStyle) {
@@ -94,43 +128,78 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       : [...form.style, s]);
   }
 
-  function save() {
-    onChange(stripUndefined(form) as Trip);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  }
-
   // ── Travelers ──────────────────────────────────────────────────────────────
 
   function adjustTravelers(delta: number) {
     const newCount = Math.max(1, Math.min(20, (form.travelers || 1) + delta));
     const newList  = syncList(travelersList, newCount);
     setForm(f => ({ ...f, travelers: newCount, travelersList: newList }));
-    setSaved(false);
+    // Close share panel if its card was removed
+    if (openShareIdx !== null && openShareIdx >= newCount) setOpenShareIdx(null);
   }
 
-  function updateTraveler(idx: number, field: keyof Omit<Traveler,'id'>, val: string) {
+  function updateTraveler(idx: number, field: keyof Omit<Traveler, 'id'>, val: string | number) {
     const newList = travelersList.map((t, i) => i === idx ? { ...t, [field]: val } : t);
     setForm(f => ({ ...f, travelersList: newList }));
-    setSaved(false);
+  }
+
+  function updateTravelerType(idx: number, type: 'adult' | 'child') {
+    const newList = travelersList.map((t, i) => {
+      if (i !== idx) return t;
+      const updated: Traveler = { ...t, type };
+      if (type === 'adult') delete updated.age;
+      return updated;
+    });
+    setForm(f => ({ ...f, travelersList: newList }));
   }
 
   // ── Sharing ────────────────────────────────────────────────────────────────
 
-  async function handleShare() {
+  function openShare(idx: number, t: Traveler) {
+    setOpenShareIdx(idx);
+    setShareEmail(t.email || '');
+    setShareRole('editor');
+    setShareError('');
+    setShareSuccess('');
+  }
+
+  async function handleShareForCard(travelerIdx: number) {
     if (!shareEmail.trim()) return;
     setShareLoading(true); setShareError(''); setShareSuccess('');
     try {
       const data = await callShareTrip(trip.id, shareEmail.trim(), shareRole);
-      const newP: TripParticipant = { uid: data.uid, email: data.email, displayName: data.displayName, role: shareRole };
+      const newP: TripParticipant = {
+        uid: data.uid, email: data.email, displayName: data.displayName, role: shareRole,
+      };
       const existing = participants.filter(p => p.uid !== data.uid);
-      onChange({ ...trip, participants: [...existing, newP], participantUids: [...new Set([...(trip.participantUids ?? []), data.uid])] });
-      setShareSuccess(`${data.displayName || data.email} ${shareRole === 'editor' ? 'נוסף/ה כעורך/ת' : 'נוסף/ה כצופה'} ✓`);
-      setShareEmail('');
+      onChange({
+        ...trip,
+        participants:    [...existing, newP],
+        participantUids: [...new Set([...(trip.participantUids ?? []), data.uid])],
+      });
+      // Backfill email on the traveler card if it was empty
+      if (!travelersList[travelerIdx]?.email) {
+        updateTraveler(travelerIdx, 'email', data.email);
+      }
+      setShareSuccess('✓ ' + (data.displayName || data.email));
+      if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
+      shareSuccessTimer.current = setTimeout(() => {
+        setOpenShareIdx(null);
+        setShareSuccess('');
+      }, 1800);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      const match = msg.match(/\(([^)]+)\)/);
-      setShareError(match?.[1] ?? msg);
+      // Firebase HttpsError arrives as "<message> (functions/<code>)" — extract message before the code
+      // Also detect "not-found" in case old Cloud Function version is deployed
+      const strippedMsg = msg.replace(/\s*\(functions\/[^)]+\)\s*$/, '').trim();
+      if (
+        msg.includes('not-found') || msg.includes('not_found') || msg.includes('NOT_FOUND') ||
+        strippedMsg.includes('לא נמצא משתמש') || strippedMsg.includes('user not found')
+      ) {
+        setShareError('המשתמש עדיין לא נרשם לאפליקציה — שלח/י לו קישור להתחבר קודם');
+      } else {
+        setShareError(strippedMsg || msg);
+      }
     } finally {
       setShareLoading(false);
     }
@@ -140,7 +209,11 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setShareLoading(true); setShareError('');
     try {
       await callRemove(trip.id, uid);
-      onChange({ ...trip, participants: participants.filter(p => p.uid !== uid), participantUids: (trip.participantUids ?? []).filter(id => id !== uid) });
+      onChange({
+        ...trip,
+        participants:    participants.filter(p => p.uid !== uid),
+        participantUids: (trip.participantUids ?? []).filter(id => id !== uid),
+      });
     } catch (e: unknown) {
       setShareError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -162,11 +235,19 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       dep:      newFlight.dep  || '',
       arr:      newFlight.arr  || '',
     };
-    set('flights', [...flights, fl]);
+    const updated = [...flights, fl];
+    setForm(f => ({ ...f, flights: updated }));
+    onChange(stripUndefined({ ...form, flights: updated }) as Trip);
+    setSavedSection('flights');
+    setTimeout(() => setSavedSection(null), 2500);
     setNewFlight(emptyFlight());
     setShowAddFlight(false);
   }
-  function deleteFlight(id: string) { set('flights', flights.filter(f => f.id !== id)); }
+  function deleteFlight(id: string) {
+    const updated = flights.filter(f => f.id !== id);
+    setForm(f => ({ ...f, flights: updated }));
+    onChange(stripUndefined({ ...form, flights: updated }) as Trip);
+  }
 
   // ── Stays ──────────────────────────────────────────────────────────────────
 
@@ -183,11 +264,19 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       address:  newStay.address,
       notes:    newStay.notes,
     };
-    set('stays', [...stays, s]);
+    const updated = [...stays, s];
+    setForm(f => ({ ...f, stays: updated }));
+    onChange(stripUndefined({ ...form, stays: updated }) as Trip);
+    setSavedSection('stays');
+    setTimeout(() => setSavedSection(null), 2500);
     setNewStay(emptyStay());
     setShowAddStay(false);
   }
-  function deleteStay(id: string) { set('stays', stays.filter(s => s.id !== id)); }
+  function deleteStay(id: string) {
+    const updated = stays.filter(s => s.id !== id);
+    setForm(f => ({ ...f, stays: updated }));
+    onChange(stripUndefined({ ...form, stays: updated }) as Trip);
+  }
 
   // ── Exchange Rates ─────────────────────────────────────────────────────────
 
@@ -206,8 +295,6 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setFetchingRates(true);
     setRatesError('');
     try {
-      // fawazahmed0 currency API via jsDelivr CDN — free, no key, CORS-friendly.
-      // Returns: { "ils": { "eur": 0.244, "usd": 0.272, ... } }
       const res = await fetch(
         'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/ils.json'
       );
@@ -230,7 +317,6 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     }
   }
 
-  // All rate currencies: standard list + any extra already stored
   const allRateCurrencies = [
     ...RATE_CURRENCIES,
     ...Object.keys(form.exchangeRates || {}).filter(c => !RATE_CURRENCIES.includes(c) && c !== 'ILS'),
@@ -303,139 +389,193 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             placeholder="הערות כלליות על הטיול..."
           />
         </div>
+
+        <div className="settings-section-save-row">
+          <button className="btn-section-save" onClick={() => saveSection('details')}>
+            {savedSection === 'details' ? '✅ נשמר!' : 'שמור'}
+          </button>
+        </div>
       </section>
 
       {/* ══ 2. מטיילים ══ */}
       <section className="settings-section">
-        <h3 className="settings-section-title">מטיילים</h3>
 
-        {/* +/- counter */}
-        <div className="trv-counter">
-          <button
-            className="trv-counter-btn"
-            onClick={() => adjustTravelers(-1)}
-            disabled={form.travelers <= 1}
-            aria-label="הפחת מטייל"
-          >−</button>
-          <span className="trv-count-num">{form.travelers}</span>
-          <button
-            className="trv-counter-btn"
-            onClick={() => adjustTravelers(1)}
-            disabled={form.travelers >= 20}
-            aria-label="הוסף מטייל"
-          >+</button>
-          <span className="trv-count-label">מטיילים</span>
+        {/* Counter header */}
+        <div className="trv-header-row">
+          <p className="trv-header-title">כמה תהיו בטיול?</p>
+          <div className="trv-counter-group">
+            <button
+              className="trv-counter-circle"
+              onClick={() => adjustTravelers(-1)}
+              disabled={form.travelers <= 1}
+            >−</button>
+            <span className="trv-counter-num">{form.travelers}</span>
+            <button
+              className="trv-counter-circle"
+              onClick={() => adjustTravelers(1)}
+              disabled={form.travelers >= 20}
+            >+</button>
+          </div>
         </div>
 
         {/* Traveler cards */}
-        {travelersList.length > 0 && (
-          <div className="trv-grid">
-            {travelersList.map((t, i) => {
-              const color = AVATAR_PALETTE[i % AVATAR_PALETTE.length];
-              const ini   = initials(t.name);
-              return (
-                <div key={t.id} className="trv-card">
-                  {/* Avatar */}
-                  <div className="trv-avatar" style={{ background: color }}>
+        <div className="trv-cards-list">
+          {travelersList.map((t, i) => {
+            const color      = AVATAR_PALETTE[i % AVATAR_PALETTE.length];
+            const ini        = initials(t.name || String(i + 1));
+            const adminCard  = isAdminCard(t, i);
+            const participant = getParticipant(t);
+            const isOpen     = openShareIdx === i;
+            const isChild    = t.type === 'child';
+
+            return (
+              <div key={t.id} className="trv-card">
+                {/* ── Top row ──
+                    RTL DOM order = visual R→L:
+                    avatar(1st→R) | type(2nd) | name(3rd) | age(4th,child) | action(last→L)
+                ── */}
+                <div className="trv-card-row">
+
+                  {/* 1st in DOM → appears RIGHTMOST in RTL */}
+                  <div className="trv-avatar-lg" style={{ background: color }}>
                     {t.avatar
-                      ? <img src={t.avatar} alt={t.name || `מטייל ${i+1}`} />
+                      ? <img src={t.avatar} alt="" />
                       : <span>{ini}</span>}
                   </div>
 
-                  {/* Inputs */}
-                  <div className="trv-inputs">
-                    <input
-                      className="trv-input trv-input--name"
-                      placeholder={`מטייל ${i + 1}`}
-                      value={t.name}
-                      onChange={e => updateTraveler(i, 'name', e.target.value)}
-                    />
-                    <input
-                      className="trv-input trv-input--email"
-                      type="email"
-                      placeholder="אימייל לגישה"
-                      value={t.email}
-                      dir="ltr"
-                      onChange={e => updateTraveler(i, 'email', e.target.value)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  {/* 2nd → type select (next to avatar on its left) */}
+                  <select
+                    className="trv-type-select"
+                    value={t.type || 'adult'}
+                    onChange={e => updateTravelerType(i, e.target.value as 'adult' | 'child')}
+                  >
+                    <option value="adult">מבוגר</option>
+                    <option value="child">ילד</option>
+                  </select>
 
-        <p className="trv-hint">הוסיפו שמות ואימיילים לצורך חלוקת הוצאות וזיהוי במסלול</p>
+                  {/* 3rd → name input (flex-1, fills remaining space) */}
+                  <input
+                    className="trv-name-input"
+                    placeholder={`מטייל ${i + 1}`}
+                    value={t.name}
+                    onChange={e => updateTraveler(i, 'name', e.target.value)}
+                  />
 
-        {/* ── גישה לאפליקציה ── */}
-        <div className="share-inline-section">
-          <h4 className="share-inline-title">🔐 גישה לאפליקציה</h4>
+                  {/* 4th → age counter (child only, left of name) */}
+                  {isChild && (
+                    <div className="trv-age-group">
+                      <button
+                        className="trv-age-circle"
+                        onClick={() => updateTraveler(i, 'age', Math.max(0, (t.age ?? 0) - 1))}
+                      >−</button>
+                      <span className="trv-age-num">{t.age ?? 0}</span>
+                      <button
+                        className="trv-age-circle"
+                        onClick={() => updateTraveler(i, 'age', Math.min(16, (t.age ?? 0) + 1))}
+                      >+</button>
+                    </div>
+                  )}
 
-          {/* Current participants */}
-          {participants.length > 0 && (
-            <div className="share-inline-list">
-              {participants.map(p => (
-                <div key={p.uid} className="share-inline-row">
-                  <span className="share-inline-avatar">
-                    {(p.displayName ?? p.email)?.[0]?.toUpperCase() ?? '?'}
-                  </span>
-                  <div className="share-inline-info">
-                    <span className="share-inline-name">{p.displayName ?? p.email}</span>
-                    <span className="share-inline-email">{p.email}</span>
-                  </div>
-                  <span className={`share-role-badge share-role--${p.role}`}>
-                    {ROLE_LABELS[p.role] ?? p.role}
-                  </span>
-                  {isOwner && (
+                  {/* Action: admin badge / shared indicator / share button */}
+                  {adminCard ? (
+                    <span className="trv-admin-badge">אדמין</span>
+                  ) : participant ? (
+                    <div className="trv-shared-status">
+                      <span className="trv-shared-check" title={participant.email}>✓</span>
+                      {isOwner && (
+                        <button
+                          className="trv-remove-btn"
+                          onClick={() => handleRemoveParticipant(participant.uid)}
+                          disabled={shareLoading}
+                          title="הסר גישה"
+                        >✕</button>
+                      )}
+                    </div>
+                  ) : (
                     <button
-                      className="share-remove-btn"
-                      onClick={() => handleRemoveParticipant(p.uid)}
+                      className={`trv-share-btn${isOpen ? ' trv-share-btn--open' : ''}`}
+                      onClick={() => isOpen ? setOpenShareIdx(null) : openShare(i, t)}
+                      title="הענק גישה לאפליקציה"
                       disabled={shareLoading}
-                      title="הסר גישה"
-                    >✕</button>
+                    >
+                      <ShareIcon />
+                    </button>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Add participant (owner only) */}
-          {isOwner && (
-            <div className="share-inline-add">
-              <input
-                className="share-email-input"
-                type="email"
-                placeholder="Gmail של בן/בת המשפחה"
-                value={shareEmail}
-                dir="ltr"
-                onChange={e => { setShareEmail(e.target.value); setShareError(''); setShareSuccess(''); }}
-                onKeyDown={e => e.key === 'Enter' && handleShare()}
-              />
-              <div className="share-role-row">
-                <button
-                  className={`share-role-btn${shareRole === 'editor' ? ' active' : ''}`}
-                  onClick={() => setShareRole('editor')}
-                >✏️ עורך</button>
-                <button
-                  className={`share-role-btn${shareRole === 'viewer' ? ' active' : ''}`}
-                  onClick={() => setShareRole('viewer')}
-                >👁️ צופה</button>
+                {/* ── Share panel (expanded) ── */}
+                {isOpen && (
+                  <div className="trv-share-panel">
+                    {shareSuccess ? (
+                      <p className="trv-share-success">{shareSuccess}</p>
+                    ) : (
+                      <div className="trv-share-row">
+                        {/* RTL order: email (→ appears RIGHT), role (middle), button (→ appears LEFT) */}
+
+                        {/* Email input — first in DOM → appears RIGHT in RTL */}
+                        <input
+                          className="trv-name-input"
+                          type="email"
+                          placeholder="Gmail"
+                          value={shareEmail}
+                          dir="ltr"
+                          onChange={e => { setShareEmail(e.target.value); setShareError(''); }}
+                          onKeyDown={e => e.key === 'Enter' && handleShareForCard(i)}
+                          autoFocus
+                        />
+
+                        {/* Role select — middle */}
+                        <select
+                          className="trv-type-select"
+                          value={shareRole}
+                          onChange={e => setShareRole(e.target.value as 'editor' | 'viewer')}
+                          dir="ltr"
+                        >
+                          <option value="editor">editor</option>
+                          <option value="viewer">viewer</option>
+                        </select>
+
+                        {/* Send button — last in DOM → appears LEFT in RTL */}
+                        <button
+                          className="trv-share-submit"
+                          onClick={() => handleShareForCard(i)}
+                          disabled={shareLoading || !shareEmail.trim()}
+                        >
+                          {shareLoading ? '...' : 'שלח שיתוף'}
+                        </button>
+                      </div>
+                    )}
+                    {shareError && (
+                      <div className="trv-share-error-wrap">
+                        <p className="trv-share-error">{shareError}</p>
+                        {shareError.includes('עדיין לא נרשם') && (
+                          <button
+                            className="trv-copy-link-btn"
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://in1177-design.github.io/TripP/').then(() => {
+                                setCopiedAppLink(true);
+                                setTimeout(() => setCopiedAppLink(false), 2500);
+                              });
+                            }}
+                          >
+                            {copiedAppLink ? '✓ הקישור הועתק!' : '🔗 העתק קישור לאפליקציה'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <button
-                className="btn-primary share-inline-submit"
-                onClick={handleShare}
-                disabled={shareLoading || !shareEmail.trim()}
-              >{shareLoading ? 'מוסיף...' : 'הענק גישה'}</button>
-              {shareError   && <p className="share-error">{shareError}</p>}
-              {shareSuccess && <p className="share-success">{shareSuccess}</p>}
-            </div>
-          )}
+            );
+          })}
+        </div>
 
-          {participants.length === 0 && !isOwner && (
-            <p className="trv-hint">אין משתמשים עם גישה לטיול זה</p>
-          )}
+        <p className="trv-hint">💡 המשתמש חייב להתחבר פעם אחת לפני שניתן להוסיף אותו</p>
 
-          <p className="trv-hint">💡 המשתמש חייב להתחבר פעם אחת לאפליקציה לפני שניתן להוסיף אותו</p>
+        <div className="settings-section-save-row">
+          <button className="btn-section-save" onClick={() => saveSection('travelers')}>
+            {savedSection === 'travelers' ? '✅ נשמר!' : 'שמור'}
+          </button>
         </div>
       </section>
 
@@ -443,6 +583,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       <section className="settings-section">
         <div className="settings-section-head">
           <h3 className="settings-section-title">טיסות</h3>
+          {savedSection === 'flights' && <span className="section-saved-badge">✅ נשמר!</span>}
           <button className="btn-outline-sm" onClick={() => setShowAddFlight(true)}>+ הוסף טיסה</button>
         </div>
 
@@ -488,6 +629,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
       <section className="settings-section">
         <div className="settings-section-head">
           <h3 className="settings-section-title">לינות</h3>
+          {savedSection === 'stays' && <span className="section-saved-badge">✅ נשמר!</span>}
           <button className="btn-outline-sm" onClick={() => setShowAddStay(true)}>+ הוסף לינה</button>
         </div>
 
@@ -580,14 +722,13 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             </div>
           ))}
         </div>
-      </section>
 
-      {/* ══ שמור ══ */}
-      <div className="settings-save-bar">
-        <button className="btn-primary" onClick={save}>
-          {saved ? '✅ נשמר!' : 'שמור שינויים'}
-        </button>
-      </div>
+        <div className="settings-section-save-row">
+          <button className="btn-section-save" onClick={() => saveSection('rates')}>
+            {savedSection === 'rates' ? '✅ נשמר!' : 'שמור'}
+          </button>
+        </div>
+      </section>
 
       {/* ══ אזור סכנה ══ */}
       {onDelete && (
