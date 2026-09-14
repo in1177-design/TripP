@@ -1,7 +1,29 @@
 import { useState } from 'react';
-import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler } from '../types';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler, TripParticipant } from '../types';
 import { generateId } from '../storage';
 import { stripUndefined } from '../db';
+import { app, auth } from '../firebase';
+
+// ── Sharing helpers ───────────────────────────────────────────────────────────
+
+interface ShareResponse { uid: string; displayName: string; email: string; }
+
+async function callShareTrip(tripId: string, email: string, role: 'editor' | 'viewer') {
+  const fns = getFunctions(app, 'us-central1');
+  const fn  = httpsCallable<{ tripId: string; email: string; role: string }, ShareResponse>(fns, 'shareTrip');
+  const res = await fn({ tripId, email, role });
+  return res.data;
+}
+async function callRemove(tripId: string, participantUid: string) {
+  const fns = getFunctions(app, 'us-central1');
+  const fn  = httpsCallable<{ tripId: string; participantUid: string }, { ok: boolean }>(fns, 'removeTripParticipant');
+  await fn({ tripId, participantUid });
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: '👑 בעלים', editor: '✏️ עורך', viewer: '👁️ צופה',
+};
 
 interface Props {
   trip:       Trip;
@@ -47,6 +69,16 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
   const [newFlight,     setNewFlight]     = useState<Partial<Flight>>(emptyFlight());
   const [newStay,       setNewStay]       = useState<Partial<Stay>>(emptyStay());
 
+  // Sharing state
+  const [shareEmail,   setShareEmail]   = useState('');
+  const [shareRole,    setShareRole]    = useState<'editor' | 'viewer'>('editor');
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError,   setShareError]   = useState('');
+  const [shareSuccess, setShareSuccess] = useState('');
+
+  const isOwner      = auth.currentUser?.uid === trip.ownerId;
+  const participants: TripParticipant[] = trip.participants ?? [];
+
   const flights       = form.flights       || [];
   const stays         = form.stays         || [];
   const travelersList = form.travelersList || [];
@@ -81,6 +113,39 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     const newList = travelersList.map((t, i) => i === idx ? { ...t, [field]: val } : t);
     setForm(f => ({ ...f, travelersList: newList }));
     setSaved(false);
+  }
+
+  // ── Sharing ────────────────────────────────────────────────────────────────
+
+  async function handleShare() {
+    if (!shareEmail.trim()) return;
+    setShareLoading(true); setShareError(''); setShareSuccess('');
+    try {
+      const data = await callShareTrip(trip.id, shareEmail.trim(), shareRole);
+      const newP: TripParticipant = { uid: data.uid, email: data.email, displayName: data.displayName, role: shareRole };
+      const existing = participants.filter(p => p.uid !== data.uid);
+      onChange({ ...trip, participants: [...existing, newP], participantUids: [...new Set([...(trip.participantUids ?? []), data.uid])] });
+      setShareSuccess(`${data.displayName || data.email} ${shareRole === 'editor' ? 'נוסף/ה כעורך/ת' : 'נוסף/ה כצופה'} ✓`);
+      setShareEmail('');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const match = msg.match(/\(([^)]+)\)/);
+      setShareError(match?.[1] ?? msg);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  async function handleRemoveParticipant(uid: string) {
+    setShareLoading(true); setShareError('');
+    try {
+      await callRemove(trip.id, uid);
+      onChange({ ...trip, participants: participants.filter(p => p.uid !== uid), participantUids: (trip.participantUids ?? []).filter(id => id !== uid) });
+    } catch (e: unknown) {
+      setShareError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setShareLoading(false);
+    }
   }
 
   // ── Flights ────────────────────────────────────────────────────────────────
@@ -300,7 +365,78 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
           </div>
         )}
 
-        <p className="trv-hint">כל מטייל יוכל להתחבר עם האימייל שלו ולראות את התכנון</p>
+        <p className="trv-hint">הוסיפו שמות ואימיילים לצורך חלוקת הוצאות וזיהוי במסלול</p>
+
+        {/* ── גישה לאפליקציה ── */}
+        <div className="share-inline-section">
+          <h4 className="share-inline-title">🔐 גישה לאפליקציה</h4>
+
+          {/* Current participants */}
+          {participants.length > 0 && (
+            <div className="share-inline-list">
+              {participants.map(p => (
+                <div key={p.uid} className="share-inline-row">
+                  <span className="share-inline-avatar">
+                    {(p.displayName ?? p.email)?.[0]?.toUpperCase() ?? '?'}
+                  </span>
+                  <div className="share-inline-info">
+                    <span className="share-inline-name">{p.displayName ?? p.email}</span>
+                    <span className="share-inline-email">{p.email}</span>
+                  </div>
+                  <span className={`share-role-badge share-role--${p.role}`}>
+                    {ROLE_LABELS[p.role] ?? p.role}
+                  </span>
+                  {isOwner && (
+                    <button
+                      className="share-remove-btn"
+                      onClick={() => handleRemoveParticipant(p.uid)}
+                      disabled={shareLoading}
+                      title="הסר גישה"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add participant (owner only) */}
+          {isOwner && (
+            <div className="share-inline-add">
+              <input
+                className="share-email-input"
+                type="email"
+                placeholder="Gmail של בן/בת המשפחה"
+                value={shareEmail}
+                dir="ltr"
+                onChange={e => { setShareEmail(e.target.value); setShareError(''); setShareSuccess(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleShare()}
+              />
+              <div className="share-role-row">
+                <button
+                  className={`share-role-btn${shareRole === 'editor' ? ' active' : ''}`}
+                  onClick={() => setShareRole('editor')}
+                >✏️ עורך</button>
+                <button
+                  className={`share-role-btn${shareRole === 'viewer' ? ' active' : ''}`}
+                  onClick={() => setShareRole('viewer')}
+                >👁️ צופה</button>
+              </div>
+              <button
+                className="btn-primary share-inline-submit"
+                onClick={handleShare}
+                disabled={shareLoading || !shareEmail.trim()}
+              >{shareLoading ? 'מוסיף...' : 'הענק גישה'}</button>
+              {shareError   && <p className="share-error">{shareError}</p>}
+              {shareSuccess && <p className="share-success">{shareSuccess}</p>}
+            </div>
+          )}
+
+          {participants.length === 0 && !isOwner && (
+            <p className="trv-hint">אין משתמשים עם גישה לטיול זה</p>
+          )}
+
+          <p className="trv-hint">💡 המשתמש חייב להתחבר פעם אחת לאפליקציה לפני שניתן להוסיף אותו</p>
+        </div>
       </section>
 
       {/* ══ 3. טיסות ══ */}

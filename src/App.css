@@ -2648,6 +2648,37 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   line-height: 1.6;
 }
 
+/* ── Share inline (inside SettingsTab) ───────────────────────────────── */
+
+.share-inline-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.share-inline-title {
+  font-size: 14px; font-weight: 700; margin-bottom: 12px;
+  color: var(--ink);
+}
+.share-inline-list { margin-bottom: 14px; }
+.share-inline-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.share-inline-row:last-child { border-bottom: none; }
+.share-inline-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--yellow); color: #000;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+}
+.share-inline-info { flex: 1; min-width: 0; }
+.share-inline-name  { font-size: 13px; font-weight: 600; display: block;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.share-inline-email { font-size: 11px; color: var(--ink-muted); display: block; }
+
+.share-inline-add { display: flex; flex-direction: column; gap: 8px; }
+.share-inline-submit { align-self: flex-start; }
+
 /* ── Share Sheet ──────────────────────────────────────────────────────── */
 
 .share-sheet { max-width: 480px; }

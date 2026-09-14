@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Trip, Flight } from '../types';
 import DashboardTab from './DashboardTab';
@@ -7,8 +6,6 @@ import PlacesTab from './PlacesTab';
 import ExpensesTab from './ExpensesTab';
 import SettingsTab from './SettingsTab';
 import JournalTab from './JournalTab';
-import ShareSheet from './ShareSheet';
-import { auth } from '../firebase';
 
 type Tab = 'dashboard' | 'itinerary' | 'places' | 'budget' | 'settings' | 'journal';
 
@@ -81,8 +78,6 @@ function HeroFlightCard({ flight }: { flight: Flight }) {
 export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: Props) {
   const { tripId, tab } = useParams<{ tripId: string; tab: string }>();
   const navigate = useNavigate();
-  const [shareOpen, setShareOpen] = useState(false);
-  const isOwner = auth.currentUser?.uid === trip.ownerId;
 
   // Resolve aliases + validate
   const resolved = tab ? (SLUG_ALIASES[tab] ?? tab) : 'dashboard';
@@ -107,18 +102,7 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
       {/* ── TOP NAV (above hero) ── */}
       <nav className="trip-topnav" dir="rtl">
         <div className="trip-topnav-inner">
-          <div className="trip-topnav-title-row">
-            <h2 className="trip-topnav-title">{trip.destination}</h2>
-            {isOwner && (
-              <button
-                className="trip-share-btn"
-                onClick={() => setShareOpen(true)}
-                title="שיתוף הטיול"
-              >
-                👥
-              </button>
-            )}
-          </div>
+          <h2 className="trip-topnav-title">{trip.destination}</h2>
           <div className="trip-topnav-tabs">
             {tabs.map(t => (
               <button
@@ -133,15 +117,6 @@ export default function TripView({ trip, onChange, onDelete, onEdit: _onEdit }: 
           </div>
         </div>
       </nav>
-
-      {/* ── SHARE SHEET ── */}
-      {shareOpen && (
-        <ShareSheet
-          trip={trip}
-          onClose={() => setShareOpen(false)}
-          onUpdate={onChange}
-        />
-      )}
 
       {/* ── HERO ── */}
       <div
