@@ -2505,9 +2505,9 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .trv-share-btn:hover { background: #222; }
 .trv-share-btn:disabled { opacity: .5; cursor: default; }
 .trv-share-btn--open {
-  background: rgba(10,10,10,.18);
+  background: rgba(17,24,39,.30); /* Figma Design 2: 30% opacity */
 }
-.trv-share-btn--open:hover { background: rgba(10,10,10,.28); }
+.trv-share-btn--open:hover { background: rgba(17,24,39,.42); }
 
 /* Admin badge (Figma: light-green pill) */
 .trv-admin-badge {
@@ -2527,6 +2527,13 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .trv-shared-check {
   font-size: 1.1rem; color: #2ecc71; font-weight: 700;
 }
+/* Clickable ✓ — opens locked panel to show email details */
+.trv-shared-check--btn {
+  background: none; border: none; cursor: pointer;
+  padding: 3px 5px; border-radius: 6px;
+  transition: background .12s;
+}
+.trv-shared-check--btn:hover { background: rgba(46,204,113,.14); }
 .trv-remove-btn {
   background: none; border: none; cursor: pointer;
   font-size: .8rem; color: var(--ink-muted); padding: 2px 4px;
