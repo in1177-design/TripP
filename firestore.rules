@@ -13,11 +13,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == tripData.ownerId;
     }
 
-    // participantUids contains ALL shared users (editors + viewers)
+    // participantUids contains ALL shared users (editors + viewers).
+    // Note: do NOT add "tripData.participantUids is list" here —
+    // that extra check prevents Firestore from proving the list-query
+    // is safe when using array-contains, causing permission-denied.
     function isParticipant(tripData) {
       return isSignedIn()
-        && tripData.participantUids is list
-        && request.auth.uid in tripData.participantUids;
+        && request.auth.uid in tripData.get('participantUids', []);
     }
 
     // editorUids contains only users with write permission
@@ -26,12 +28,10 @@ service cloud.firestore {
       return isSignedIn()
         && (
           (tripData.keys().hasAll(['editorUids'])
-            && tripData.editorUids is list
-            && request.auth.uid in tripData.editorUids)
+            && request.auth.uid in tripData.get('editorUids', []))
           ||
           (!tripData.keys().hasAll(['editorUids'])
-            && tripData.participantUids is list
-            && request.auth.uid in tripData.participantUids)
+            && request.auth.uid in tripData.get('participantUids', []))
         );
     }
 

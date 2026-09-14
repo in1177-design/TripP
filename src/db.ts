@@ -121,8 +121,10 @@ export function subscribeTrips(
       // Both 'failed-precondition' and 'permission-denied' can appear while the
       // composite index (participantUids + startDate) is still being built —
       // treat both as a transient "index not ready" situation.
-      const msg = (err.code === 'failed-precondition' || err.code === 'permission-denied')
-        ? 'הטיולים המשותפים עדיין לא נטענו — האינדקס של Firebase בונה. רענן את הדף בעוד כמה דקות.'
+      const msg = err.code === 'failed-precondition'
+        ? 'הטיולים המשותפים טעינה כושלת — האינדקס של Firebase עדיין בונה. רענן בעוד דקה.'
+        : err.code === 'permission-denied'
+        ? 'שגיאת הרשאות בטעינת טיולים משותפים — בדוק שכללי Firestore מעודכנים.'
         : `שגיאה בטעינת טיולים משותפים (${err.code})`;
       console.error('subscribeTrips shared query error:', err.code, err.message);
       onSharedError?.(msg);
