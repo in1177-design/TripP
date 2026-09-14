@@ -13,48 +13,49 @@ interface Props {
 
 const provider = new GoogleAuthProvider();
 
-// Mobile browsers block popups — use redirect instead
-function isMobile() {
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-}
-
 export default function SignInScreen({ onSignedIn }: Props) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
-  // Handle redirect result when user comes back from Google
+  // Handle result when user comes back from a redirect-based sign-in
   useEffect(() => {
-    setLoading(true);
     getRedirectResult(auth)
       .then(result => {
         if (result?.user) onSignedIn?.();
       })
-      .catch(e => {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (!msg.includes('popup-closed') && !msg.includes('no-redirect')) {
-          setError('ההתחברות נכשלה. נסי שוב.');
-        }
-      })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        // Redirect result errors are silent — user can try again manually
+      });
   }, [onSignedIn]);
 
   async function handleGoogle() {
     setLoading(true);
     setError('');
     try {
-      if (isMobile()) {
-        // Redirect flow — page will reload and come back via getRedirectResult
-        await signInWithRedirect(auth, provider);
-      } else {
-        await signInWithPopup(auth, provider);
-        onSignedIn?.();
-      }
+      // Popup works on desktop AND modern mobile browsers.
+      // It's more reliable than redirect (no cross-site cookie dependency).
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged in App.tsx handles the rest
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (!msg.includes('popup-closed-by-user')) {
+
+      if (msg.includes('popup-blocked')) {
+        // Popup was blocked by the browser — fall back to redirect flow
+        try {
+          await signInWithRedirect(auth, provider);
+          // Page will navigate away; result handled in useEffect above on return
+          return; // don't setLoading(false) — we're navigating away
+        } catch {
+          setError('ההתחברות נכשלה. נסי שוב.');
+          setLoading(false);
+        }
+      } else if (msg.includes('popup-closed-by-user') || msg.includes('popup-closed')) {
+        // User voluntarily closed the popup — not an error
+        setLoading(false);
+      } else {
         setError('ההתחברות נכשלה. נסי שוב.');
+        setLoading(false);
       }
-      setLoading(false);
     }
   }
 
