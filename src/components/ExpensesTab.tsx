@@ -653,6 +653,16 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
                           {isEarlyPurchase ? ` • נקנה ${fmtDateShort(exp.date)}` : ''}
                         </span>
                       </div>
+                      {/* Adder avatar — shows who added this expense in shared trips */}
+                      {avatar && (
+                        <div
+                          className={`exp-adder-chip${isMine ? ' exp-adder-chip--me' : ''}`}
+                          style={{ background: avatar.color }}
+                          title={avatar.name}
+                        >
+                          {avatar.label}
+                        </div>
+                      )}
                       {/* Amounts — leftmost in RTL */}
                       <div className="exp-row-amounts">
                         {ilsAmt > 0 ? (
@@ -670,16 +680,6 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
                           </span>
                         )}
                       </div>
-                      {/* Adder avatar — shows who added this expense in shared trips */}
-                      {avatar && (
-                        <div
-                          className={`exp-adder-chip${isMine ? ' exp-adder-chip--me' : ''}`}
-                          style={{ background: avatar.color }}
-                          title={avatar.name}
-                        >
-                          {avatar.label}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
