@@ -7,7 +7,7 @@ import { app, auth } from '../firebase';
 
 // ── Sharing helpers ───────────────────────────────────────────────────────────
 
-interface ShareResponse { uid: string; displayName: string; email: string; }
+interface ShareResponse { uid?: string; displayName?: string; email: string; pending: boolean; }
 
 async function callShareTrip(tripId: string, email: string, role: 'editor' | 'viewer') {
   const fns = getFunctions(app, 'us-central1');
@@ -168,38 +168,44 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
     setShareLoading(true); setShareError(''); setShareSuccess('');
     try {
       const data = await callShareTrip(trip.id, shareEmail.trim(), shareRole);
-      const newP: TripParticipant = {
-        uid: data.uid, email: data.email, displayName: data.displayName, role: shareRole,
-      };
-      const existing = participants.filter(p => p.uid !== data.uid);
-      onChange({
-        ...trip,
-        participants:    [...existing, newP],
-        participantUids: [...new Set([...(trip.participantUids ?? []), data.uid])],
-      });
-      // Backfill email on the traveler card if it was empty
-      if (!travelersList[travelerIdx]?.email) {
-        updateTraveler(travelerIdx, 'email', data.email);
+
+      if (data.pending) {
+        // Invite stored — user not yet in Firebase Auth
+        // Backfill email on the traveler card
+        if (!travelersList[travelerIdx]?.email) {
+          updateTraveler(travelerIdx, 'email', data.email);
+        }
+        setShareSuccess('✉️ הזמנה נשמרה! כשיתחברו לאפליקציה, הטיול יופיע אוטומטית');
+        if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
+        shareSuccessTimer.current = setTimeout(() => {
+          setOpenShareIdx(null);
+          setShareSuccess('');
+        }, 3500);
+      } else {
+        // User already registered — add as participant immediately
+        const newP: TripParticipant = {
+          uid: data.uid!, email: data.email, displayName: data.displayName!, role: shareRole,
+        };
+        const existing = participants.filter(p => p.uid !== data.uid);
+        onChange({
+          ...trip,
+          participants:    [...existing, newP],
+          participantUids: [...new Set([...(trip.participantUids ?? []), data.uid!])],
+        });
+        if (!travelersList[travelerIdx]?.email) {
+          updateTraveler(travelerIdx, 'email', data.email);
+        }
+        setShareSuccess('✓ ' + (data.displayName || data.email));
+        if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
+        shareSuccessTimer.current = setTimeout(() => {
+          setOpenShareIdx(null);
+          setShareSuccess('');
+        }, 1800);
       }
-      setShareSuccess('✓ ' + (data.displayName || data.email));
-      if (shareSuccessTimer.current) clearTimeout(shareSuccessTimer.current);
-      shareSuccessTimer.current = setTimeout(() => {
-        setOpenShareIdx(null);
-        setShareSuccess('');
-      }, 1800);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      // Firebase HttpsError arrives as "<message> (functions/<code>)" — extract message before the code
-      // Also detect "not-found" in case old Cloud Function version is deployed
       const strippedMsg = msg.replace(/\s*\(functions\/[^)]+\)\s*$/, '').trim();
-      if (
-        msg.includes('not-found') || msg.includes('not_found') || msg.includes('NOT_FOUND') ||
-        strippedMsg.includes('לא נמצא משתמש') || strippedMsg.includes('user not found')
-      ) {
-        setShareError('המשתמש עדיין לא נרשם לאפליקציה — שלח/י לו קישור להתחבר קודם');
-      } else {
-        setShareError(strippedMsg || msg);
-      }
+      setShareError(strippedMsg || msg);
     } finally {
       setShareLoading(false);
     }

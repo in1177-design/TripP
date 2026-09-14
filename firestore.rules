@@ -54,6 +54,15 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data);
     }
 
+    // ── Pending invites — written by Admin SDK only ────────────────────────────
+    // Invited user can read their own invites; no client writes allowed.
+    match /invites/{email}/trips/{tripId} {
+      allow read: if isSignedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == email;
+      allow write: if false;
+    }
+
     // ── Rate limit counters — server-side Admin SDK only ───────────────────────
     match /_rateLimits/{document=**} {
       allow read, write: if false;

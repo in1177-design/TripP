@@ -4,7 +4,8 @@ import {
   useNavigate, useParams, useLocation,
 } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { auth, app } from './firebase';
 import { saveTrip, deleteTrip, subscribeTrips } from './db';
 import { generateId } from './storage';
 import type { Trip } from './types';
@@ -36,10 +37,18 @@ function AppContent() {
     return unsub;
   }, []);
 
-  // 2. Once signed in, subscribe to this user's trips
+  // 2. Once signed in, accept pending invites then subscribe to trips
   useEffect(() => {
     if (!authReady || !uid) return;
     setLoading(true);
+
+    // Accept any email-based pending invites for this user (fire-and-forget).
+    // The real-time listener below will pick up the new trip automatically.
+    if (auth.currentUser?.email) {
+      const fns = getFunctions(app, 'us-central1');
+      httpsCallable(fns, 'acceptPendingInvites')({}).catch(console.warn);
+    }
+
     const unsub = subscribeTrips(data => {
       setTrips(data);
       setLoading(false);

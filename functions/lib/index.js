@@ -1,7 +1,40 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.enrichPlace = void 0;
-const admin = require("firebase-admin");
+exports.removeTripParticipant = exports.acceptPendingInvites = exports.shareTrip = exports.enrichPlace = void 0;
+const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const firestore_1 = require("firebase-admin/firestore");
@@ -22,13 +55,12 @@ async function checkRateLimits(uid) {
     // Global counter
     const globalRef = db.doc(`_rateLimits/global/${day}/count`);
     await db.runTransaction(async (tx) => {
-        var _a, _b, _c, _d;
         const [userSnap, globalSnap] = await Promise.all([
             tx.get(userRef),
             tx.get(globalRef),
         ]);
-        const userCount = (_b = (_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.n) !== null && _b !== void 0 ? _b : 0;
-        const globalCount = (_d = (_c = globalSnap.data()) === null || _c === void 0 ? void 0 : _c.n) !== null && _d !== void 0 ? _d : 0;
+        const userCount = userSnap.data()?.n ?? 0;
+        const globalCount = globalSnap.data()?.n ?? 0;
         if (userCount >= DAILY_USER_QUOTA) {
             throw new https_1.HttpsError('resource-exhausted', `הגעת למגבלה היומית (${DAILY_USER_QUOTA} קריאות). נסי שוב מחר.`);
         }
@@ -51,22 +83,21 @@ exports.enrichPlace = (0, https_1.onCall)({
         'http://localhost:4173',
     ],
 }, async (request) => {
-    var _a, _b, _c, _d, _e;
     // 1. Require a real (non-anonymous) Google account
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'נדרשת כניסה לחשבון.');
     }
-    const provider = (_a = request.auth.token.firebase) === null || _a === void 0 ? void 0 : _a.sign_in_provider;
+    const provider = request.auth.token.firebase?.sign_in_provider;
     if (provider === 'anonymous') {
         throw new https_1.HttpsError('permission-denied', 'יש להתחבר עם חשבון Google כדי להשתמש ב-AI.');
     }
     const uid = request.auth.uid;
     // 2. Validate input
     const data = request.data;
-    if (!(data === null || data === void 0 ? void 0 : data.placeName) || typeof data.placeName !== 'string') {
+    if (!data?.placeName || typeof data.placeName !== 'string') {
         throw new https_1.HttpsError('invalid-argument', 'שדה placeName חסר.');
     }
-    if (!(data === null || data === void 0 ? void 0 : data.tripDestination) || typeof data.tripDestination !== 'string') {
+    if (!data?.tripDestination || typeof data.tripDestination !== 'string') {
         throw new https_1.HttpsError('invalid-argument', 'שדה tripDestination חסר.');
     }
     const placeName = data.placeName.slice(0, 300).trim();
@@ -81,8 +112,8 @@ exports.enrichPlace = (0, https_1.onCall)({
             throw new https_1.HttpsError('not-found', 'הטיול לא נמצא.');
         }
         const tripData = tripSnap.data();
-        const hasAccess = (tripData === null || tripData === void 0 ? void 0 : tripData.ownerId) === uid ||
-            ((_b = tripData === null || tripData === void 0 ? void 0 : tripData.participantUids) !== null && _b !== void 0 ? _b : []).includes(uid);
+        const hasAccess = tripData?.ownerId === uid ||
+            (tripData?.participantUids ?? []).includes(uid);
         if (!hasAccess) {
             throw new https_1.HttpsError('permission-denied', 'אין גישה לטיול זה.');
         }
@@ -132,12 +163,12 @@ exports.enrichPlace = (0, https_1.onCall)({
         throw new https_1.HttpsError('internal', `שגיאת AI: ${response.status}`);
     }
     const anthropicData = await response.json();
-    const text = (_e = (_d = (_c = anthropicData.content) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.text) !== null && _e !== void 0 ? _e : '{}';
+    const text = anthropicData.content?.[0]?.text ?? '{}';
     let json;
     try {
         json = JSON.parse(text.replace(/```json|```/g, '').trim());
     }
-    catch (_f) {
+    catch {
         console.error('Failed to parse Anthropic response:', text);
         throw new https_1.HttpsError('internal', 'שגיאה בפענוח תגובת AI.');
     }
@@ -158,5 +189,156 @@ exports.enrichPlace = (0, https_1.onCall)({
         description: typeof json.description === 'string' ? json.description : undefined,
         website: typeof json.website === 'string' ? json.website : undefined,
     };
+});
+const SHARE_CORS = [
+    'https://in1177-design.github.io',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:4173',
+];
+exports.shareTrip = (0, https_1.onCall)({ maxInstances: 5, timeoutSeconds: 15, cors: SHARE_CORS }, async (request) => {
+    // 1. Auth check
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'נדרשת כניסה לחשבון.');
+    }
+    const callerUid = request.auth.uid;
+    // 2. Validate input
+    const { tripId, email, role } = request.data;
+    if (!tripId || typeof tripId !== 'string')
+        throw new https_1.HttpsError('invalid-argument', 'tripId חסר.');
+    if (!email || typeof email !== 'string')
+        throw new https_1.HttpsError('invalid-argument', 'email חסר.');
+    if (role !== 'editor' && role !== 'viewer')
+        throw new https_1.HttpsError('invalid-argument', 'role לא תקין.');
+    const emailLower = email.trim().toLowerCase();
+    // 3. Verify caller is owner of the trip
+    const tripRef = db.doc(`trips/${tripId}`);
+    const tripSnap = await tripRef.get();
+    if (!tripSnap.exists)
+        throw new https_1.HttpsError('not-found', 'הטיול לא נמצא.');
+    const tripData = tripSnap.data();
+    if (tripData.ownerId !== callerUid) {
+        throw new https_1.HttpsError('permission-denied', 'רק בעל הטיול יכול לשתף אותו.');
+    }
+    // 4. Look up target user by email
+    let targetUser = null;
+    try {
+        targetUser = await admin.auth().getUserByEmail(emailLower);
+    }
+    catch {
+        // User not in Firebase Auth yet — store a pending invite and return early
+        await db
+            .collection('invites').doc(emailLower)
+            .collection('trips').doc(tripId)
+            .set({
+            role,
+            invitedBy: callerUid,
+            invitedAt: firestore_1.Timestamp.now(),
+            tripId,
+            email: emailLower,
+        });
+        return { email: emailLower, pending: true };
+    }
+    const targetUid = targetUser.uid;
+    if (targetUid === callerUid)
+        throw new https_1.HttpsError('invalid-argument', 'לא ניתן לשתף עם עצמך.');
+    // 5. Build participant record
+    const newParticipant = {
+        uid: targetUid,
+        email: emailLower,
+        displayName: targetUser.displayName ?? emailLower,
+        role,
+    };
+    // 6. Update trip — add participant atomically
+    const existingParticipants = (tripData.participants ?? []);
+    const filtered = existingParticipants.filter(p => p.uid !== targetUid);
+    await tripRef.update({
+        participants: [...filtered, newParticipant],
+        participantUids: firestore_1.FieldValue.arrayUnion(targetUid),
+    });
+    return {
+        uid: targetUid,
+        displayName: newParticipant.displayName,
+        email: emailLower,
+        pending: false,
+    };
+});
+// ── acceptPendingInvites ──────────────────────────────────────────────────────
+// Called client-side right after sign-in. Finds all pending invites for this
+// user's email, adds them as participants in each trip, then deletes the invites.
+exports.acceptPendingInvites = (0, https_1.onCall)({ maxInstances: 5, timeoutSeconds: 20, cors: SHARE_CORS }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'נדרשת כניסה.');
+    const uid = request.auth.uid;
+    const email = request.auth.token.email?.toLowerCase();
+    if (!email)
+        return { accepted: 0 };
+    // 1. Get this user's Auth record (for displayName)
+    const userRecord = await admin.auth().getUser(uid);
+    // 2. Query pending invites for this email
+    const inviteSnaps = await db
+        .collection('invites').doc(email)
+        .collection('trips')
+        .get();
+    if (inviteSnaps.empty)
+        return { accepted: 0 };
+    // 3. Accept each invite: add to trip participants, then delete the invite doc
+    let accepted = 0;
+    await Promise.all(inviteSnaps.docs.map(async (snap) => {
+        const invite = snap.data();
+        const tripRef = db.doc(`trips/${invite.tripId}`);
+        const tripSnap = await tripRef.get();
+        if (!tripSnap.exists) {
+            await snap.ref.delete(); // stale invite — clean up
+            return;
+        }
+        const tripData = tripSnap.data();
+        const existing = (tripData.participants ?? []).filter(p => p.uid !== uid);
+        const newP = {
+            uid,
+            email,
+            displayName: userRecord.displayName ?? email,
+            role: invite.role,
+        };
+        await tripRef.update({
+            participants: [...existing, newP],
+            participantUids: firestore_1.FieldValue.arrayUnion(uid),
+        });
+        await snap.ref.delete();
+        accepted++;
+    }));
+    return { accepted };
+});
+exports.removeTripParticipant = (0, https_1.onCall)({
+    maxInstances: 5,
+    timeoutSeconds: 15,
+    cors: [
+        'https://in1177-design.github.io',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:4173',
+    ],
+}, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'נדרשת כניסה.');
+    const callerUid = request.auth.uid;
+    const { tripId, participantUid } = request.data;
+    if (!tripId || !participantUid)
+        throw new https_1.HttpsError('invalid-argument', 'פרמטרים חסרים.');
+    const tripRef = db.doc(`trips/${tripId}`);
+    const tripSnap = await tripRef.get();
+    if (!tripSnap.exists)
+        throw new https_1.HttpsError('not-found', 'הטיול לא נמצא.');
+    const tripData = tripSnap.data();
+    // Only owner can remove others; a participant can remove themselves
+    if (tripData.ownerId !== callerUid && callerUid !== participantUid) {
+        throw new https_1.HttpsError('permission-denied', 'אין הרשאה להסיר משתתף זה.');
+    }
+    const updatedParticipants = (tripData.participants ?? []).filter(p => p.uid !== participantUid);
+    await tripRef.update({
+        participants: updatedParticipants,
+        participantUids: firestore_1.FieldValue.arrayRemove(participantUid),
+    });
+    return { ok: true };
 });
 //# sourceMappingURL=index.js.map

@@ -209,22 +209,21 @@ interface ShareRequest {
 }
 
 interface ShareResponse {
-  uid:         string;
-  displayName: string;
-  email:       string;
+  uid?:         string;
+  displayName?: string;
+  email:        string;
+  pending:      boolean; // true = invite stored, user not yet in Firebase Auth
 }
 
+const SHARE_CORS = [
+  'https://in1177-design.github.io',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+];
+
 export const shareTrip = onCall(
-  {
-    maxInstances:   5,
-    timeoutSeconds: 15,
-    cors: [
-      'https://in1177-design.github.io',
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:4173',
-    ],
-  },
+  { maxInstances: 5, timeoutSeconds: 15, cors: SHARE_CORS },
   async (request): Promise<ShareResponse> => {
     // 1. Auth check
     if (!request.auth) {
@@ -251,12 +250,22 @@ export const shareTrip = onCall(
     }
 
     // 4. Look up target user by email
-    let targetUser: admin.auth.UserRecord;
+    let targetUser: admin.auth.UserRecord | null = null;
     try {
       targetUser = await admin.auth().getUserByEmail(emailLower);
     } catch {
-      throw new HttpsError('not-found',
-        'לא נמצא משתמש עם כתובת המייל הזו. על המשתמש להתחבר לפחות פעם אחת לאפליקציה.');
+      // User not in Firebase Auth yet — store a pending invite and return early
+      await db
+        .collection('invites').doc(emailLower)
+        .collection('trips').doc(tripId)
+        .set({
+          role,
+          invitedBy: callerUid,
+          invitedAt: Timestamp.now(),
+          tripId,
+          email: emailLower,
+        });
+      return { email: emailLower, pending: true };
     }
 
     const targetUid = targetUser.uid;
@@ -272,7 +281,7 @@ export const shareTrip = onCall(
 
     // 6. Update trip — add participant atomically
     const existingParticipants = (tripData.participants ?? []) as Array<{ uid: string }>;
-    const filtered = existingParticipants.filter(p => p.uid !== targetUid); // replace if already exists
+    const filtered = existingParticipants.filter(p => p.uid !== targetUid);
 
     await tripRef.update({
       participants:    [...filtered, newParticipant],
@@ -283,7 +292,68 @@ export const shareTrip = onCall(
       uid:         targetUid,
       displayName: newParticipant.displayName,
       email:       emailLower,
+      pending:     false,
     };
+  },
+);
+
+// ── acceptPendingInvites ──────────────────────────────────────────────────────
+// Called client-side right after sign-in. Finds all pending invites for this
+// user's email, adds them as participants in each trip, then deletes the invites.
+
+export const acceptPendingInvites = onCall(
+  { maxInstances: 5, timeoutSeconds: 20, cors: SHARE_CORS },
+  async (request): Promise<{ accepted: number }> => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'נדרשת כניסה.');
+
+    const uid   = request.auth.uid;
+    const email = request.auth.token.email?.toLowerCase();
+    if (!email) return { accepted: 0 };
+
+    // 1. Get this user's Auth record (for displayName)
+    const userRecord = await admin.auth().getUser(uid);
+
+    // 2. Query pending invites for this email
+    const inviteSnaps = await db
+      .collection('invites').doc(email)
+      .collection('trips')
+      .get();
+
+    if (inviteSnaps.empty) return { accepted: 0 };
+
+    // 3. Accept each invite: add to trip participants, then delete the invite doc
+    let accepted = 0;
+    await Promise.all(inviteSnaps.docs.map(async snap => {
+      const invite = snap.data() as { tripId: string; role: 'editor' | 'viewer' };
+      const tripRef  = db.doc(`trips/${invite.tripId}`);
+      const tripSnap = await tripRef.get();
+
+      if (!tripSnap.exists) {
+        await snap.ref.delete(); // stale invite — clean up
+        return;
+      }
+
+      const tripData = tripSnap.data() as {
+        participants?:    Array<{ uid: string }>;
+        participantUids?: string[];
+      };
+      const existing = (tripData.participants ?? []).filter(p => p.uid !== uid);
+      const newP = {
+        uid,
+        email,
+        displayName: userRecord.displayName ?? email,
+        role:        invite.role,
+      };
+
+      await tripRef.update({
+        participants:    [...existing, newP],
+        participantUids: FieldValue.arrayUnion(uid),
+      });
+      await snap.ref.delete();
+      accepted++;
+    }));
+
+    return { accepted };
   },
 );
 
