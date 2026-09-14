@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { doc, updateDoc } from 'firebase/firestore';
 import type { Trip, TripStyle, Flight, Stay, ItemStatus, Traveler, TripParticipant } from '../types';
 import { generateId } from '../storage';
 import { stripUndefined } from '../db';
-import { app, auth } from '../firebase';
+import { app, auth, db as firestoreDb } from '../firebase';
 
 // ── Sharing helpers ───────────────────────────────────────────────────────────
 
@@ -91,6 +92,24 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
 
   const isOwner      = auth.currentUser?.uid === trip.ownerId;
   const participants: TripParticipant[] = trip.participants ?? [];
+
+  // Auto-repair: if any participant UID is missing from participantUids, fix it.
+  // This heals trips that were saved before the participantUids-preservation fix.
+  useEffect(() => {
+    if (!isOwner || participants.length === 0) return;
+    const currentUids = trip.participantUids ?? [];
+    const missingUids = participants.map(p => p.uid).filter(uid => !currentUids.includes(uid));
+    if (missingUids.length === 0) return;
+
+    console.log('[SettingsTab] Repairing participantUids — adding:', missingUids);
+    const tripRef = doc(firestoreDb, 'trips', trip.id);
+    const fixed = [...new Set([...currentUids, ...missingUids])];
+    updateDoc(tripRef, { participantUids: fixed })
+      .then(() => console.log('[SettingsTab] participantUids repaired:', fixed))
+      .catch(e => console.error('[SettingsTab] repair failed:', e));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip.id, trip.participantUids?.join(','), participants.map(p => p.uid).join(',')]);
+
 
   const flights       = form.flights       || [];
   const stays         = form.stays         || [];
