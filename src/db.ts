@@ -99,12 +99,13 @@ export function subscribeTrips(
     },
   );
 
-  // Query 2: trips shared with this user
-  // Requires composite index: participantUids (array-contains) + startDate (desc)
+  // Query 2: trips shared with this user.
+  // No orderBy here — a simple array-contains query uses Firestore's auto-built
+  // single-field index and doesn't need a composite index.
+  // Ordering is handled client-side in merge() below.
   const qShared = query(
     collection(db, TRIPS),
     where('participantUids', 'array-contains', uid),
-    orderBy('startDate', 'desc'),
   );
 
   const unsubShared = onSnapshot(
