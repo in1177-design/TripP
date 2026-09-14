@@ -66,13 +66,14 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
     snap => {
       ownedTrips = snap.docs.map(d => d.data() as Trip);
       ownedReady = true;
+      if (!sharedReady) sharedReady = true; // unblock merge if shared never resolves
       merge();
     },
     err => {
       console.warn('subscribeTrips owned query error:', err.code, err.message);
-      // If index not ready yet, surface empty list so app doesn't hang
       ownedReady = true;
-      if (!sharedReady) { sharedReady = true; sharedTrips = []; }
+      // Do NOT reset sharedTrips — only mark ready so merge() unblocks
+      if (!sharedReady) sharedReady = true;
       merge();
     },
   );
@@ -89,12 +90,14 @@ export function subscribeTrips(callback: (trips: Trip[]) => void): Unsubscribe {
     snap => {
       sharedTrips = snap.docs.map(d => d.data() as Trip);
       sharedReady = true;
+      if (!ownedReady) ownedReady = true;
       merge();
     },
     err => {
       console.warn('subscribeTrips shared query error:', err.code, err.message);
       sharedReady = true;
-      if (!ownedReady) { ownedReady = true; ownedTrips = []; }
+      // Do NOT reset ownedTrips — only mark ready so merge() unblocks
+      if (!ownedReady) ownedReady = true;
       merge();
     },
   );
