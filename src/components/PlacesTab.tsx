@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Trip, Place, PlaceType, ItineraryItem } from '../types';
 import { generateId } from '../storage';
 import { enrichPlace, searchPlaces, getPlaceDetails, savePlaceIdea } from '../aiService';
-import type { PlaceSearchResult, PlaceDetailsResult } from '../aiService';
+import type { PlaceSearchResult } from '../aiService';
 
 const TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
 const TYPE_ICONS: Record<string, string> = {
@@ -340,9 +340,6 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const foodCount       = trip.places.filter(p =>  FOOD_TYPES.has(p.type)).length;
 
   /* ── CRUD ───────────────────────────────────────────────────── */
-  function openAdd() {
-    setForm(blank()); setEditingId(null); setAiError(''); setModalOpen(true);
-  }
   function openEdit(place: Place) {
     setForm({ ...place }); setEditingId(place.id); setAiError(''); setModalOpen(true);
   }
