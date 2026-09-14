@@ -117,11 +117,11 @@ export function subscribeTrips(
     },
     err => {
       // Surface the error so the UI can tell the user what went wrong.
-      // 'failed-precondition' means the composite index isn't ready yet.
-      const msg = err.code === 'failed-precondition'
-        ? 'האינדקס של Firestore עדיין לא מוכן — הטיולים המשותפים ייטענו בקרוב. רענן את הדף.'
-        : err.code === 'permission-denied'
-        ? 'אין הרשאה לטעון טיולים משותפים.'
+      // Both 'failed-precondition' and 'permission-denied' can appear while the
+      // composite index (participantUids + startDate) is still being built —
+      // treat both as a transient "index not ready" situation.
+      const msg = (err.code === 'failed-precondition' || err.code === 'permission-denied')
+        ? 'הטיולים המשותפים עדיין לא נטענו — האינדקס של Firebase בונה. רענן את הדף בעוד כמה דקות.'
         : `שגיאה בטעינת טיולים משותפים (${err.code})`;
       console.error('subscribeTrips shared query error:', err.code, err.message);
       onSharedError?.(msg);
