@@ -1698,11 +1698,26 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .settings-root { padding: 12px; }
   .settings-section { padding: 14px 14px; }
   .settings-row { flex-wrap: wrap; }
-  .trv-card { padding: 14px; }
-  .trv-avatar-lg { width: 48px; height: 48px; font-size: 1.1rem; }
-  .trv-type-select { width: 80px; }
+  .trv-card { padding: 12px; }
+  .trv-card-row { gap: 8px; }
+
+  /* Traveler card top row: shrink fixed items so name has room */
+  .trv-avatar-lg { width: 42px; height: 42px; font-size: 1rem; flex-shrink: 0; }
+  .trv-type-select { width: 70px; font-size: .78rem; padding: 6px 4px; }
+
+  /* Share row: email full width on first row, role+button on second row */
   .trv-share-row { flex-wrap: wrap; gap: 8px; }
-  .trv-share-submit { flex: 1; min-width: 100px; }
+  .trv-share-row .trv-name-input { flex: 0 0 100%; }          /* email → full width */
+  .trv-share-row .trv-type-select { flex: 1; width: auto; }   /* role → fill remaining */
+  .trv-share-submit { flex: 1; min-width: 90px; }
+  .trv-share-edit-btn { flex: 0 0 auto; }
+
+  /* "שותף בהצלחה" — allow wrapping, smaller text */
+  .trv-share-success-inline { white-space: normal; font-size: .82rem; gap: 4px; }
+
+  /* Age counter: smaller circles to save space */
+  .trv-age-circle { width: 28px; height: 28px; }
+  .trv-age-num { font-size: 1.1rem; min-width: 22px; }
 
   /* ── Dashboard — single column, RTL-safe flex stack ── */
   .dash-new { display: flex; flex-direction: column; padding: 12px 0 24px; gap: 10px; }
