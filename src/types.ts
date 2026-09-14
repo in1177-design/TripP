@@ -146,6 +146,7 @@ export interface Expense {
   subcategory?: string;
   receiptNote?: string;
   paymentMethod?: 'cash' | 'card' | 'online';
+  addedByUid?: string;      // Firebase Auth UID of who added this expense
 }
 
 export interface JournalEntry {

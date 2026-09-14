@@ -2,6 +2,20 @@ import { useState, useMemo } from 'react';
 import type { Trip, Expense, ExpenseCategory, CustomCategory } from '../types';
 import { generateId } from '../storage';
 import { detectLocalCurrency } from '../utils/currencyUtils';
+import { auth } from '../firebase';
+
+// ─── Avatar helpers ───────────────────────────────────────────
+const AVATAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'];
+function uidColor(uid: string): string {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) & 0xffffffff;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+function nameInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
 // ─── Category metadata ────────────────────────────────────────
 type CatMeta = { icon: string; color: string };
@@ -400,8 +414,9 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
         ),
       });
     } else {
-      // Add new expense
-      const toSave: Expense = { ...toSaveForm, id: generateId(), dateEnd, useDate };
+      // Add new expense — stamp who added it
+      const addedByUid = auth.currentUser?.uid || undefined;
+      const toSave: Expense = { ...toSaveForm, id: generateId(), dateEnd, useDate, addedByUid };
       onChange({ ...trip, expenses: [...expenses, toSave] });
     }
     setShowModal(false);
@@ -554,79 +569,126 @@ export default function ExpensesTab({ trip, onChange, onNavigate }: Props) {
           <p>אין הוצאות עדיין</p>
           <p style={{ fontSize: 13, marginTop: 6, color: 'var(--ink-muted)' }}>לחצי על + כדי להוסיף</p>
         </div>
-      ) : (
-        <div className="exp-list">
-          {grouped.map(g => (
-            <div key={g.date} className="exp-group">
-              {(() => {
-                const dayILS = Object.entries(g.dayTot).reduce((s, [cur, amt]) => s + toILS(amt, cur), 0);
-                return (
-                  <div className="exp-group-hdr">
-                    <span className="exp-group-date">{fmtDateHdr(g.date)}</span>
-                    <span className="exp-group-tot">
-                      {dayILS > 0
-                        ? `₪ ${dayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                        : Object.entries(g.dayTot).map(([cur, amt]) => `${amt.toFixed(0)} ${cur}`).join(' · ')}
-                    </span>
-                  </div>
-                );
-              })()}
-              <div className="exp-group-rows">
-              {g.exps.map((exp, idx) => {
-                const m = getCatMeta(exp.category);
-                const isSpread = !!exp._numDays;
-                const dispAmt  = exp._perDay ?? exp.amount;
-                const ilsAmt   = toILS(dispAmt, exp.currency);
-                const showOrig = exp.currency !== 'ILS' || isSpread; // show original if foreign or spread
-                const isEarlyPurchase = !!(exp.useDate && exp.useDate > exp.date);
-                return (
-                  <div key={`${exp.id}-${idx}`} className="exp-row" onClick={() => openEdit(exp)}>
-                    {/* Icon — rightmost in RTL */}
-                    <div className="exp-icon-circle" style={{ background: m.color }}>
-                      <CatIcon cat={exp.category} size={18} fallback={m.icon} />
-                    </div>
-                    {/* Name + meta */}
-                    <div className="exp-row-body">
-                      <div className="exp-row-desc-line">
-                        <span className="exp-row-desc">{exp.description}</span>
-                        {isSpread && <span className="exp-spread-badge">{exp._numDays} ימים</span>}
-                        {isEarlyPurchase && <span className="exp-early-badge">🎟️</span>}
-                      </div>
-                      <span className="exp-row-sub">
-                        {exp.category}
-                        {exp.subcategory ? ` • ${exp.subcategory}` : ''}
-                        {exp.paymentMethod ? ` • ${{ cash: 'מזומן', card: 'אשראי', online: 'הזמנה אינטרנטית' }[exp.paymentMethod] ?? exp.paymentMethod}` : ''}
-                        {isSpread && exp.dateEnd
-                          ? ` • ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
-                          : ''}
-                        {isEarlyPurchase ? ` • נקנה ${fmtDateShort(exp.date)}` : ''}
+      ) : (() => {
+        // Build avatar map: uid → { label, color, name } — used when trip is shared
+        const currentUid = auth.currentUser?.uid;
+        const isShared   = (trip.participants?.length ?? 0) > 0;
+        const avatarMap: Record<string, { label: string; color: string; name: string }> = {};
+        if (isShared) {
+          (trip.participants ?? []).forEach(p => {
+            const name = p.displayName || p.email;
+            avatarMap[p.uid] = {
+              label: nameInitials(name),
+              color: uidColor(p.uid),
+              name,
+            };
+          });
+          // Add owner = current user (may not be in participants array)
+          if (currentUid && !avatarMap[currentUid] && auth.currentUser) {
+            const name = auth.currentUser.displayName || auth.currentUser.email || 'אני';
+            avatarMap[currentUid] = {
+              label: nameInitials(name),
+              color: uidColor(currentUid),
+              name,
+            };
+          }
+        }
+
+        return (
+          <div className="exp-list">
+            {grouped.map(g => (
+              <div key={g.date} className="exp-group">
+                {(() => {
+                  const dayILS = Object.entries(g.dayTot).reduce((s, [cur, amt]) => s + toILS(amt, cur), 0);
+                  return (
+                    <div className="exp-group-hdr">
+                      <span className="exp-group-date">{fmtDateHdr(g.date)}</span>
+                      <span className="exp-group-tot">
+                        {dayILS > 0
+                          ? `₪ ${dayILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : Object.entries(g.dayTot).map(([cur, amt]) => `${amt.toFixed(0)} ${cur}`).join(' · ')}
                       </span>
                     </div>
-                    {/* Amounts — leftmost in RTL */}
-                    <div className="exp-row-amounts">
-                      {ilsAmt > 0 ? (
-                        <span className="exp-row-ils">
-                          ₪{ilsAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  );
+                })()}
+                <div className="exp-group-rows">
+                {g.exps.map((exp, idx) => {
+                  const m = getCatMeta(exp.category);
+                  const isSpread = !!exp._numDays;
+                  const dispAmt  = exp._perDay ?? exp.amount;
+                  const ilsAmt   = toILS(dispAmt, exp.currency);
+                  const showOrig = exp.currency !== 'ILS' || isSpread;
+                  const isEarlyPurchase = !!(exp.useDate && exp.useDate > exp.date);
+
+                  // Avatar: shown only in shared trips, only when addedByUid is known
+                  const avatar = isShared && exp.addedByUid
+                    ? (avatarMap[exp.addedByUid] ?? {
+                        label: exp.addedByUid.slice(0, 2).toUpperCase(),
+                        color: uidColor(exp.addedByUid),
+                        name: exp.addedByUid,
+                      })
+                    : null;
+                  const isMine = exp.addedByUid === currentUid;
+
+                  return (
+                    <div key={`${exp.id}-${idx}`} className="exp-row" onClick={() => openEdit(exp)}>
+                      {/* Icon — rightmost in RTL */}
+                      <div className="exp-icon-circle" style={{ background: m.color }}>
+                        <CatIcon cat={exp.category} size={18} fallback={m.icon} />
+                      </div>
+                      {/* Name + meta */}
+                      <div className="exp-row-body">
+                        <div className="exp-row-desc-line">
+                          <span className="exp-row-desc">{exp.description}</span>
+                          {isSpread && <span className="exp-spread-badge">{exp._numDays} ימים</span>}
+                          {isEarlyPurchase && <span className="exp-early-badge">🎟️</span>}
+                        </div>
+                        <span className="exp-row-sub">
+                          {exp.category}
+                          {exp.subcategory ? ` • ${exp.subcategory}` : ''}
+                          {exp.paymentMethod ? ` • ${{ cash: 'מזומן', card: 'אשראי', online: 'הזמנה אינטרנטית' }[exp.paymentMethod] ?? exp.paymentMethod}` : ''}
+                          {isSpread && exp.dateEnd
+                            ? ` • ${fmtDateShort(exp.date)}–${fmtDateShort(exp.dateEnd)}`
+                            : ''}
+                          {isEarlyPurchase ? ` • נקנה ${fmtDateShort(exp.date)}` : ''}
                         </span>
-                      ) : (
-                        <span className="exp-row-ils">
-                          {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
-                        </span>
-                      )}
-                      {ilsAmt > 0 && showOrig && (
-                        <span className="exp-row-orig">
-                          {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
-                        </span>
+                      </div>
+                      {/* Amounts — leftmost in RTL */}
+                      <div className="exp-row-amounts">
+                        {ilsAmt > 0 ? (
+                          <span className="exp-row-ils">
+                            ₪{ilsAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </span>
+                        ) : (
+                          <span className="exp-row-ils">
+                            {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
+                          </span>
+                        )}
+                        {ilsAmt > 0 && showOrig && (
+                          <span className="exp-row-orig">
+                            {dispAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} {exp.currency}
+                          </span>
+                        )}
+                      </div>
+                      {/* Adder avatar — shows who added this expense in shared trips */}
+                      {avatar && (
+                        <div
+                          className={`exp-adder-chip${isMine ? ' exp-adder-chip--me' : ''}`}
+                          style={{ background: avatar.color }}
+                          title={avatar.name}
+                        >
+                          {avatar.label}
+                        </div>
                       )}
                     </div>
-                  </div>
-                );
-              })}
-              </div>{/* end exp-group-rows */}
-            </div>
-          ))}
-        </div>
-      ))}
+                  );
+                })}
+                </div>{/* end exp-group-rows */}
+              </div>
+            ))}
+          </div>
+        );
+      })())}
 
       {/* ── FAB ── */}
       <button className="exp-fab" onClick={openModal} aria-label="הוסף הוצאה">+</button>
