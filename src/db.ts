@@ -1,5 +1,5 @@
 import {
-  collection, doc, setDoc, deleteDoc, onSnapshot,
+  collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, orderBy, where,
 } from 'firebase/firestore';
 import type { Unsubscribe } from 'firebase/firestore';
@@ -21,7 +21,23 @@ export function stripUndefined(obj: unknown): unknown {
 }
 
 export async function saveTrip(trip: Trip): Promise<void> {
-  await setDoc(doc(db, TRIPS, trip.id), stripUndefined(trip));
+  // Never touch participants / participantUids from the client —
+  // those fields are owned exclusively by Cloud Functions (shareTrip,
+  // removeTripParticipant, acceptPendingInvites).  Using updateDoc here
+  // ensures we only write the fields we send and never blow away sharing data.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { participants, participantUids, ...tripData } = trip;
+  const tripRef = doc(db, TRIPS, trip.id);
+  try {
+    await updateDoc(tripRef, stripUndefined(tripData) as Record<string, unknown>);
+  } catch (e: unknown) {
+    // If the document doesn't exist yet (new trip), fall back to setDoc
+    if ((e as { code?: string }).code === 'not-found') {
+      await setDoc(tripRef, stripUndefined(tripData));
+    } else {
+      throw e;
+    }
+  }
 }
 
 export async function deleteTrip(id: string): Promise<void> {
