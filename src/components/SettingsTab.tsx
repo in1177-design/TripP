@@ -588,14 +588,14 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                         <input
                           className="trv-name-input"
                           type="email"
-                          value={shareEmail || participant?.email || ''}
+                          value={participant?.email || ''}
                           disabled
                           dir="ltr"
                         />
                         {/* Role — disabled */}
                         <select
                           className="trv-type-select"
-                          value={shareRole || (participant?.role as 'editor' | 'viewer') || 'editor'}
+                          value={(participant?.role as 'editor' | 'viewer') || 'editor'}
                           disabled
                           dir="ltr"
                         >
