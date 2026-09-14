@@ -434,10 +434,16 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
             const ini        = initials(t.name || String(i + 1));
             const adminCard  = isAdminCard(t, i);
             const participant = getParticipant(t);
-            const isOpen     = openShareIdx === i;
-            const isChild    = t.type === 'child';
-            // Design 3 (locked) when panel is open + either just sent OR participant already exists (persistent)
-            const isLocked   = isOpen && (!!shareSuccess || (!!participant && !forceEdit));
+            const isOpen         = openShareIdx === i;
+            const isChild        = t.type === 'child';
+            // Show locked panel always when participant exists (persists across navigation/refresh)
+            const showLockedPanel = !!participant && !forceEdit;
+            // Show edit panel only when explicitly opened
+            const showEditPanel  = isOpen && !showLockedPanel;
+            // Panel visible when either locked OR editing
+            const showPanel      = showLockedPanel || showEditPanel;
+            // Design 3 locked state — either participant exists or just sent a pending invite
+            const isLocked       = showLockedPanel || (isOpen && !!shareSuccess && !forceEdit);
 
             return (
               <div key={t.id} className="trv-card">
@@ -458,7 +464,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                   <select
                     className="trv-type-select"
                     value={t.type || 'adult'}
-                    disabled={isLocked}
+                    disabled={showLockedPanel}
                     onChange={e => updateTravelerType(i, e.target.value as 'adult' | 'child')}
                   >
                     <option value="adult">מבוגר</option>
@@ -470,7 +476,7 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                     className="trv-name-input"
                     placeholder={`מטייל ${i + 1}`}
                     value={t.name}
-                    disabled={isLocked}
+                    disabled={showLockedPanel}
                     onChange={e => updateTraveler(i, 'name', e.target.value)}
                   />
 
@@ -489,39 +495,40 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                     </div>
                   )}
 
-                  {/* Action area — 4 states:
-                      Admin              → admin badge (no share)
-                      Design 3 (locked)  → "שותף בהצלחה ✓" green text (panel open + sent/participant)
-                      Participant closed → ✓ (clickable, opens panel) + ✕ remove
-                      Design 2 (open)   → muted share button (click = close panel)
-                      Design 1 (default) → dark share button (click = open panel)
+                  {/* Action area — states:
+                      Admin                → admin badge
+                      showLockedPanel      → "שותף בהצלחה ✓" green (Design 3, always visible for participants)
+                      pending success      → "שותף בהצלחה ✓" green (just sent pending invite)
+                      isOpen + edit mode   → muted share button (Design 2, click = close)
+                      default              → dark share button (Design 1, click = open)
                   */}
                   {adminCard ? (
                     <span className="trv-admin-badge">אדמין</span>
-                  ) : isLocked ? (
-                    /* Design 3 top row — green "שותף בהצלחה ✓" */
+                  ) : showLockedPanel ? (
+                    /* Design 3 — permanently visible ✓ + remove button */
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <div className="trv-share-success-inline">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>שותף בהצלחה</span>
+                      </div>
+                      {isOwner && (
+                        <button
+                          className="trv-remove-btn"
+                          onClick={() => handleRemoveParticipant(participant!.uid)}
+                          disabled={shareLoading}
+                          title="הסר גישה"
+                        >✕</button>
+                      )}
+                    </div>
+                  ) : isOpen && (shareSuccess || isLocked) ? (
+                    /* Pending invite sent — green text */
                     <div className="trv-share-success-inline">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <polyline points="20 6 9 17 4 12" stroke="#2ecc71" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       <span>שותף בהצלחה</span>
-                    </div>
-                  ) : participant && !isOpen ? (
-                    /* Participant exists, panel collapsed — ✓ clickable opens locked panel + ✕ remove */
-                    <div className="trv-shared-status">
-                      <button
-                        className="trv-shared-check trv-shared-check--btn"
-                        title={`לחץ לפרטים — ${participant.email}`}
-                        onClick={() => openShare(i, t)}
-                      >✓</button>
-                      {isOwner && (
-                        <button
-                          className="trv-remove-btn"
-                          onClick={() => handleRemoveParticipant(participant.uid)}
-                          disabled={shareLoading}
-                          title="הסר גישה"
-                        >✕</button>
-                      )}
                     </div>
                   ) : isOpen ? (
                     /* Design 2 top row — muted share button (click = close panel) */
@@ -546,8 +553,8 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                   )}
                 </div>
 
-                {/* ── Share panel (expanded) ── */}
-                {isOpen && (
+                {/* ── Share panel (expanded) — always visible for participants (Design 3) ── */}
+                {showPanel && (
                   <div className="trv-share-panel">
                     {isLocked ? (
                       /* ── Design 3: LOCKED VIEW ── persistent even after navigation ── */
@@ -573,7 +580,16 @@ export default function SettingsTab({ trip, onChange, onDelete }: Props) {
                         {/* Pencil edit button (Design 3: dark 42×42 icon button) */}
                         <button
                           className="trv-share-edit-btn"
-                          onClick={() => { setShareSuccess(''); setShareError(''); setForceEdit(true); }}
+                          onClick={() => {
+                            setShareSuccess('');
+                            setShareError('');
+                            setForceEdit(true);
+                            setOpenShareIdx(i); // ensure panel stays open in edit mode
+                            if (participant) {
+                              setShareEmail(participant.email);
+                              setShareRole(participant.role as 'editor' | 'viewer');
+                            }
+                          }}
                           title="ערוך פרטי שיתוף"
                         >
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
