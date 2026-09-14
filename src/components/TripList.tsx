@@ -1,5 +1,4 @@
 import type { Trip } from '../types';
-import { seedPolandTrip } from '../seedPoland';
 
 interface Props {
   trips: Trip[];
@@ -25,7 +24,6 @@ export default function TripList({ trips, onSelect, onNew }: Props) {
       <div className="list-header">
         <h1>הטיולים שלי</h1>
         <button className="btn-primary" onClick={onNew}>+ טיול חדש</button>
-          <button className="btn-secondary btn-sm" onClick={seedPolandTrip}>🇵🇱 ייבא פולין (מקומות)</button>
       </div>
 
       {trips.length === 0 ? (
