@@ -1929,7 +1929,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 
 .itin-cal-header,
 .itin-cal-week {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px;
 }
 .itin-cal-header { margin-bottom: 6px; }
 .itin-cal-week   { margin-bottom: 8px; }
@@ -1943,6 +1943,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 /* Day cell: flex-col, stretch children, 96px tall */
 .itin-cal-day {
   display: flex; flex-direction: column; align-items: stretch;
+  min-width: 0; /* prevent cell from expanding beyond its 1fr share */
   min-height: 96px; padding: 8px 8px 6px;
   background: var(--surface); border: 1.5px solid transparent;
   border-radius: 12px; cursor: pointer; gap: 2px;
@@ -1984,6 +1985,16 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 .itin-cal-day.active .icd-city { color: #71717a; }
 
+/* ── Mobile: hide city label so 7-col grid fits in the viewport ── */
+@media (max-width: 600px) {
+  .icd-city { display: none; }
+  .itin-cal-header, .itin-cal-week { gap: 2px; }
+  .itin-cal-day { min-height: 64px; padding: 4px 3px 3px; }
+  .itin-cal-empty { min-height: 64px; }
+  .icd-month { font-size: 8px; }
+  .icd-num   { font-size: 13px; }
+}
+
 /* Dots row: centered, fills bottom space */
 .icd-foot {
   display: flex; align-items: center; justify-content: center;
@@ -1998,7 +2009,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 }
 
 /* Empty cell placeholder */
-.itin-cal-empty { min-height: 96px; border-radius: 12px; }
+.itin-cal-empty { min-height: 96px; min-width: 0; border-radius: 12px; }
 
 /* ════ DAY VIEW ════════════════════════════════════════════════ */
 .itin-day { display: flex; flex-direction: column; gap: 0; }
