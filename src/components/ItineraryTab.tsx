@@ -1,6 +1,11 @@
 import { useState, useMemo, useRef } from 'react';
 import type { Trip, ItineraryItem, ItemType, DayPeriod, Place } from '../types';
 import { generateId } from '../storage';
+import {
+  Search, Pencil, X, Trash2, Check,
+  Sunrise, Sun, Moon, Clock, Globe, UtensilsCrossed, Compass, Leaf,
+  Landmark, ShoppingBag, Calendar as CalIcon,
+} from 'lucide-react';
 
 interface Props {
   trip: Trip;
@@ -285,7 +290,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
   if (dates.length === 0) {
     return (
       <div className="itin-empty">
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🗓️</div>
+        <div style={{ marginBottom: 12 }}><CalIcon size={48} strokeWidth={1} style={{ opacity:0.3 }} /></div>
         <h3>אין תאריכים לטיול</h3>
         <p>ערוך את פרטי הטיול והוסף תאריכי התחלה וסיום</p>
       </div>
@@ -329,7 +334,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
             <div className="itin-day-subhdr">
               <input
                 className="itin-base-input"
-                placeholder="📍 עיר / מקום"
+                placeholder="עיר / מקום"
                 value={dayBases[activeDay] || ''}
                 onChange={e => setBase(activeDay, e.target.value)}
               />
@@ -376,7 +381,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
           {/* ── Station / auto item cards ── */}
           {dayStations.length === 0 && activeFlights.length === 0 && activeStays.length === 0 ? (
             <div className="itin-empty-day">
-              <div style={{ fontSize: 36, marginBottom: 8 }}>🗒️</div>
+              <div style={{ marginBottom: 8 }}><CalIcon size={36} strokeWidth={1} style={{ opacity:0.3 }} /></div>
               <p>עדיין אין תחנות ביום הזה.</p>
               <p style={{ fontSize: 13 }}>הוסיפי מהבנק או צרי תחנה חדשה.</p>
             </div>
@@ -500,7 +505,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
         >
           <div className="exp-sheet exp-sheet--form itin-sheet">
             <div className="exp-sheet-hdr">
-              <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+              <button className="exp-sheet-close" onClick={closeSheet}><X size={18} strokeWidth={2} /></button>
               <span className="exp-sheet-title">
                 {editItem ? 'עריכת תחנה' : 'הוספת תחנה'}
               </span>
@@ -511,11 +516,11 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
             {!editItem && sourceChosen === null && (
               <div className="itin-source-pick">
                 <button className="itin-source-btn" onClick={() => setSourceChosen('bank')}>
-                  <span style={{ fontSize: 28 }}>🔍</span>
+                  <Search size={28} strokeWidth={1.5} style={{ display:'block', marginBottom:4 }} />
                   <span>מהבנק</span>
                 </button>
                 <button className="itin-source-btn" onClick={() => setSourceChosen('new')}>
-                  <span style={{ fontSize: 28 }}>✏️</span>
+                  <Pencil size={28} strokeWidth={1.5} style={{ display:'block', marginBottom:4 }} />
                   <span>תחנה חדשה</span>
                 </button>
               </div>
@@ -523,13 +528,13 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
 
             {/* Bank list */}
             {sourceChosen === 'bank' && (() => {
-              const BANK_CATS = [
-                { key: 'הכל',     label: '🌍 הכל' },
-                { key: 'אוכל',    label: '🍽️ אוכל' },
-                { key: 'אטרקציה', label: '🎯 אטרקציות' },
-                { key: 'טבע',     label: '🌿 טבע' },
-                { key: 'מוזיאון', label: '🏛️ מוזיאון' },
-                { key: 'שוק',     label: '🏪 שוק' },
+              const BANK_CATS: { key: string; label: string; icon: React.ElementType }[] = [
+                { key: 'הכל',     label: 'הכל',      icon: Globe },
+                { key: 'אוכל',    label: 'אוכל',     icon: UtensilsCrossed },
+                { key: 'אטרקציה', label: 'אטרקציות', icon: Compass },
+                { key: 'טבע',     label: 'טבע',      icon: Leaf },
+                { key: 'מוזיאון', label: 'מוזיאון',  icon: Landmark },
+                { key: 'שוק',     label: 'שוק',      icon: ShoppingBag },
               ];
               const FOOD = new Set(['מסעדה', 'קפה']);
               const filtered = bankPlaces.filter(p => {
@@ -545,13 +550,13 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                 <>
                   {/* Category chips */}
                   <div className="itin-bank-cats">
-                    {BANK_CATS.map(({ key, label }) => (
+                    {BANK_CATS.map(({ key, label, icon: BankIcon }) => (
                       <button
                         key={key}
                         className={`chip chip-sm ${bankFilter === key ? 'chip-active' : ''}`}
                         onClick={() => setBankFilter(key)}
                       >
-                        {label}
+                        <BankIcon size={12} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:3 }} />{label}
                         <span className="chip-count">
                           {key === 'הכל' ? bankPlaces.length
                             : key === 'אוכל' ? bankPlaces.filter(p => FOOD.has(p.type)).length
@@ -588,7 +593,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                       style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: 'var(--ink-muted)', fontSize: 13 }}
                       onClick={() => setSourceChosen('new')}
                     >
-                      ✏️ תחנה חדשה במקום
+                      <Pencil size={13} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />תחנה חדשה במקום
                     </button>
                   </div>
                 </>
@@ -627,11 +632,11 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                       <button
                         className={form.type === 'activity' ? 'active' : ''}
                         onClick={() => setForm(p => ({ ...p, type: 'activity' }))}
-                      >🎯 פעילות</button>
+                      ><Compass size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />פעילות</button>
                       <button
                         className={form.type === 'food' ? 'active' : ''}
                         onClick={() => setForm(p => ({ ...p, type: 'food' }))}
-                      >🍽️ אוכל</button>
+                      ><UtensilsCrossed size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />אוכל</button>
                     </div>
                   </div>
                 )}
@@ -641,17 +646,17 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                   <label className="itin-form-label">חלק ביום</label>
                   <div className="itin-period-chips">
                     {([
-                      { v: 'morning',   label: '🌅 בוקר' },
-                      { v: 'afternoon', label: '☀️ צהריים' },
-                      { v: 'evening',   label: '🌙 ערב' },
-                      { v: 'unset',     label: '⏳ טרם נקבע' },
-                    ] as { v: DayPeriod; label: string }[]).map(({ v, label }) => (
+                      { v: 'morning',   label: 'בוקר',     icon: Sunrise },
+                      { v: 'afternoon', label: 'צהריים',   icon: Sun },
+                      { v: 'evening',   label: 'ערב',      icon: Moon },
+                      { v: 'unset',     label: 'טרם נקבע', icon: Clock },
+                    ] as { v: DayPeriod; label: string; icon: React.ElementType }[]).map(({ v, label, icon: PIcon }) => (
                       <button
                         key={v}
                         className={`itin-period-chip ${form.period === v ? 'active' : ''}`}
                         onClick={() => setForm(p => ({ ...p, period: v }))}
                       >
-                        {label}
+                        <PIcon size={13} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />{label}
                       </button>
                     ))}
                   </div>
@@ -686,7 +691,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                   disabled={!form.name.trim()}
                   onClick={saveStation}
                 >
-                  {editItem ? '✓ שמור שינויים' : '+ הוסף תחנה'}
+                  <Check size={15} strokeWidth={2.5} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />{editItem ? 'שמור שינויים' : 'הוסף תחנה'}
                 </button>
 
                 {editItem && (
@@ -694,7 +699,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
                     className="itin-btn-delete"
                     onClick={() => { deleteItem(editItem.id); closeSheet(); }}
                   >
-                    🗑️ מחק תחנה
+                    <Trash2 size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:5 }} />מחק תחנה
                   </button>
                 )}
               </div>

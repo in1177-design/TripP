@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Map as MapIcon, Star, Compass, UtensilsCrossed, Landmark, Leaf, RefreshCw } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Place } from '../types';
@@ -48,12 +49,12 @@ function getIcon(p: Place) {
 }
 
 // ── Legend item ─────────────────────────────────────────────────────────────
-const LEGEND = [
-  { color: '#eab308', label: '⭐ Must' },
-  { color: '#3b82f6', label: '🎯 אטרקציה' },
-  { color: '#f97316', label: '🍽️ אוכל' },
-  { color: '#8b5cf6', label: '🏛️ מוזיאון' },
-  { color: '#22c55e', label: '🌿 טבע' },
+const LEGEND: { color: string; label: string; icon: React.ElementType }[] = [
+  { color: '#eab308', label: 'Must',     icon: Star },
+  { color: '#3b82f6', label: 'אטרקציה',  icon: Compass },
+  { color: '#f97316', label: 'אוכל',     icon: UtensilsCrossed },
+  { color: '#8b5cf6', label: 'מוזיאון',  icon: Landmark },
+  { color: '#22c55e', label: 'טבע',      icon: Leaf },
 ];
 
 interface Props {
@@ -149,10 +150,10 @@ export default function TripMap({ places, destination }: Props) {
   if (geoPlaces.length === 0) {
     return (
       <div className="tripmap-empty">
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🗺️</div>
+        <div style={{ marginBottom: 12 }}><MapIcon size={48} strokeWidth={1} style={{ opacity: 0.3 }} /></div>
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>אין מקומות על המפה עדיין</div>
         <div style={{ fontSize: 13, color: 'var(--ink-muted)', maxWidth: 260, textAlign: 'center', lineHeight: 1.5 }}>
-          לחצי 🔄 רענן על מקומות בבנק הרעיונות כדי לאתר אותם על המפה
+          לחצי <RefreshCw size={12} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle' }} /> רענן על מקומות בבנק הרעיונות כדי לאתר אותם על המפה
         </div>
         {destination && (
           <div style={{ marginTop: 16, fontSize: 12, color: 'var(--ink-muted)' }}>
@@ -170,9 +171,10 @@ export default function TripMap({ places, destination }: Props) {
 
       {/* Legend */}
       <div className="tripmap-legend">
-        {LEGEND.map(({ color, label }) => (
+        {LEGEND.map(({ color, label, icon: LIcon }) => (
           <span key={label} className="tripmap-legend-item">
             <span className="tripmap-legend-dot" style={{ background: color }} />
+            <LIcon size={11} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:2 }} />
             {label}
           </span>
         ))}

@@ -3,14 +3,31 @@ import type { Trip, Place, PlaceType, ItineraryItem } from '../types';
 import { generateId } from '../storage';
 import { enrichPlace, searchPlaces, getPlaceDetails, savePlaceIdea } from '../aiService';
 import type { PlaceSearchResult } from '../aiService';
+import {
+  Search, Plus, LayoutList, Map, Star, Building2, Compass, UtensilsCrossed,
+  Leaf, Landmark, RefreshCw, CalendarPlus, Pencil, X, Tag,
+  MapPin, Link as LinkIcon, ExternalLink, AlertTriangle, Clock, Car, Banknote,
+  Globe, TreePine, Coffee, ShoppingCart,
+} from 'lucide-react';
+
+// Tiny wrapper so we can inline Lucide icons without className boilerplate
+function Ic({ icon: Icon, size = 16, style }: { icon: React.ElementType; size?: number; style?: React.CSSProperties }) {
+  return <Icon size={size} strokeWidth={1.75} style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...style }} />;
+}
 
 const TripMap = lazy(() => import('./TripMap'));
 
 const TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
-const TYPE_ICONS: Record<string, string> = {
-  'אטרקציה': '🎯', 'מסעדה': '🍽️', 'קפה': '☕', 'מוזיאון': '🏛️',
-  'שוק': '🛒', 'פארק': '🌳', 'שכונה': '🏘️', 'אחר': '📌',
+
+// Lucide icon component per type (for hero placeholder & view modal)
+const TYPE_ICON_COMPONENTS: Record<string, React.ElementType> = {
+  'אטרקציה': Compass, 'מסעדה': UtensilsCrossed, 'קפה': Coffee, 'מוזיאון': Landmark,
+  'שוק': ShoppingCart, 'פארק': TreePine, 'שכונה': Building2, 'אחר': MapPin,
 };
+function TypeIcon({ type, size = 40 }: { type: string; size?: number }) {
+  const Icon = TYPE_ICON_COMPONENTS[type] || MapPin;
+  return <Icon size={size} strokeWidth={1.25} style={{ display: 'block', opacity: 0.22 }} />;
+}
 
 // Badge background colors per type (matches Figma)
 const TYPE_COLORS: Record<string, string> = {
@@ -31,14 +48,15 @@ const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 
 const FOOD_TYPES = new Set<PlaceType>(['מסעדה', 'קפה']);
 type FilterKey = 'הכל' | 'must' | 'אטרקציה' | 'אוכל' | 'טבע' | 'מוזיאון' | 'ערים';
 
-const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
-  { key: 'הכל',     label: '🗺️ הכל' },
-  { key: 'must',    label: '⭐ Must' },
-  { key: 'ערים',    label: '🏙️ ערים' },
-  { key: 'אטרקציה', label: '🎯 אטרקציות' },
-  { key: 'אוכל',    label: '🍽️ אוכל' },
-  { key: 'טבע',     label: '🌿 טבע' },
-  { key: 'מוזיאון', label: '🏛️ מוזיאון' },
+type FilterChipDef = { key: FilterKey; label: string; icon: React.ElementType };
+const FILTER_CHIPS: FilterChipDef[] = [
+  { key: 'הכל',     label: 'הכל',      icon: Map },
+  { key: 'must',    label: 'Must',     icon: Star },
+  { key: 'ערים',    label: 'ערים',     icon: Building2 },
+  { key: 'אטרקציה', label: 'אטרקציות', icon: Compass },
+  { key: 'אוכל',    label: 'אוכל',     icon: UtensilsCrossed },
+  { key: 'טבע',     label: 'טבע',      icon: Leaf },
+  { key: 'מוזיאון', label: 'מוזיאון',  icon: Landmark },
 ];
 
 // Normalize city names (Latin or variant Hebrew) → canonical Hebrew
@@ -363,7 +381,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
         if (selectedCity) places = places.filter(p => normalizeCity(p.city || '') === selectedCity);
         break;
     }
-    return places.sort((a, b) => Number(b.must) - Number(a.must));
+    return places; // no reorder on must-toggle — cards stay in place
   }, [trip.places, filter, selectedCity]);
 
   /* ── CRUD ───────────────────────────────────────────────────── */
@@ -842,7 +860,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
       setSheetEditingId(null);
     } catch (err) {
       const msg = (err as { message?: string }).message || '';
-      setSearchError(msg.includes('כבר קיים') ? '⚠️ המקום כבר קיים בבנק הרעיונות' : 'שגיאה בשמירה — נסי שוב');
+      setSearchError(msg.includes('כבר קיים') ? 'המקום כבר קיים בבנק הרעיונות' : 'שגיאה בשמירה — נסי שוב');
     } finally {
       setSheetSaving(false);
     }
@@ -855,18 +873,18 @@ export default function PlacesTab({ trip, onChange }: Props) {
       {/* ── TOOLBAR ── */}
       <div className="tab-toolbar">
         <div className="toolbar-left">
-          <button className="btn-secondary btn-sm" onClick={openSheet}>🔍 חפש מקום</button>
-          <button className="btn-primary btn-sm" onClick={openSheetManual}>+ הוסף ידנית</button>
+          <button className="btn-secondary btn-sm" onClick={openSheet}><Search size={14} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:5 }} />חפש מקום</button>
+          <button className="btn-primary btn-sm" onClick={openSheetManual}><Plus size={14} strokeWidth={2.5} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:3 }} />הוסף ידנית</button>
         </div>
         <div className="places-view-toggle">
           <button
             className={`places-view-btn ${placesView === 'bank' ? 'active' : ''}`}
             onClick={() => setPlacesView('bank')}
-          >📋 בנק</button>
+          ><LayoutList size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />בנק</button>
           <button
             className={`places-view-btn ${placesView === 'map' ? 'active' : ''}`}
             onClick={() => setPlacesView('map')}
-          >🗺️ מפה</button>
+          ><Map size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:4 }} />מפה</button>
         </div>
       </div>
 
@@ -884,12 +902,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
       {/* ── FILTER CHIPS ── */}
       {placesView === 'bank' && (<>
       <div className="filter-chips-row">
-        {FILTER_CHIPS.map(({ key, label }) => (
+        {FILTER_CHIPS.map(({ key, label, icon: ChipIcon }) => (
           <button
             key={key}
             className={`chip ${filter === key ? 'chip-active' : ''}`}
             onClick={() => { setFilter(key); setSelectedCity(null); }}
           >
+            <ChipIcon size={13} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginInlineEnd: 4 }} />
             {label}
             {key === 'הכל' && trip.places.length > 0 && (
               <span className="chip-count">{trip.places.length}</span>
@@ -904,14 +923,14 @@ export default function PlacesTab({ trip, onChange }: Props) {
           <button
             className={`chip chip-sm ${selectedCity === null ? 'chip-active' : ''}`}
             onClick={() => setSelectedCity(null)}
-          >🌍 הכל</button>
+          ><Globe size={12} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginInlineEnd: 3 }} />הכל</button>
           {allCities.map(city => (
             <button
               key={city}
               className={`chip chip-sm ${selectedCity === city ? 'chip-active' : ''}`}
               onClick={() => setSelectedCity(city)}
             >
-              📍 {city}
+              <MapPin size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginInlineEnd: 3 }} />{city}
               <span className="chip-count">
                 {trip.places.filter(p => normalizeCity(p.city || '') === city).length}
               </span>
@@ -923,7 +942,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
       {/* ── CARDS GRID (flat, no city grouping) ── */}
       {filteredPlaces.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">🗺️</div>
+          <div className="empty-icon"><Map size={48} strokeWidth={1} style={{ opacity: 0.3 }} /></div>
           <p>{filter === 'הכל' ? 'אין מקומות עדיין — הוסיפי את הראשון!' : `אין מקומות בקטגוריה "${filter}"`}</p>
         </div>
       ) : (
@@ -948,14 +967,14 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     </>
                   ) : (
                     <span className="idea-card-hero-icon" aria-hidden="true">
-                      {TYPE_ICONS[place.type] || '📌'}
+                      <TypeIcon type={place.type} size={48} />
                     </span>
                   )}
 
                   {/* Category + Must badges */}
                   <div className="idea-card-badges">
                     {place.must && (
-                      <span className="idea-card-badge idea-card-badge--must">Must ⭐</span>
+                      <span className="idea-card-badge idea-card-badge--must"><Star size={10} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:3 }} />Must</span>
                     )}
                     <span
                       className="idea-card-badge"
@@ -969,7 +988,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     className="idea-card-del"
                     onClick={e => { e.stopPropagation(); remove(place.id); }}
                     title="מחק"
-                  >✕</button>
+                  ><X size={14} strokeWidth={2} /></button>
                 </div>
 
                 {/* ── Body ── */}
@@ -989,15 +1008,15 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   <div className="idea-card-pills">
                     {(place.priceAdult != null || place.priceChild != null) && (
                       <span className="idea-card-pill idea-card-pill--price">
+                        <Tag size={11} strokeWidth={2} />
                         {place.priceAdult != null ? `מבוגר ₪${place.priceAdult}` : ''}
                         {place.priceAdult != null && place.priceChild != null ? ' · ' : ''}
                         {place.priceChild != null ? `ילד ₪${place.priceChild}` : ''}
-                        {' 🏷️'}
                       </span>
                     )}
                     {place.rating != null && (
                       <span className="idea-card-pill idea-card-pill--rating">
-                        {place.rating} ⭐
+                        <Star size={11} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle' }} /> {place.rating}
                       </span>
                     )}
                     <a
@@ -1009,7 +1028,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       rel="noreferrer"
                       className="idea-card-pill idea-card-pill--ta"
                       onClick={e => e.stopPropagation()}
-                    >{place.website ? '🔗 אתר' : 'TripAdvisor'}</a>
+                    >{place.website ? <><LinkIcon size={11} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle' }} /> אתר</> : 'TripAdvisor'}</a>
                   </div>
 
                   {/* Divider */}
@@ -1023,7 +1042,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       className={`idea-card-icon-btn ${place.must ? 'on' : ''}`}
                       onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
                       title="Must"
-                    >{place.must ? '⭐' : '☆'}</button>
+                    ><Star size={17} strokeWidth={place.must ? 2.5 : 1.75} fill={place.must ? 'currentColor' : 'none'} /></button>
 
                     {/* Action icons (right side) */}
                     <div className="idea-card-actions">
@@ -1034,7 +1053,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                         onClick={e => { e.stopPropagation(); handleRefresh(place); }}
                         disabled={isRefreshing}
                         title="רענן פרטים"
-                      >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
+                      ><RefreshCw size={16} strokeWidth={1.75} className={isRefreshing ? 'spin' : ''} /></button>
 
                       {/* Calendar */}
                       <div className="cal-btn-wrap" onClick={e => e.stopPropagation()}>
@@ -1043,7 +1062,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                           className={`idea-card-icon-btn ${calOpen ? 'on' : ''}`}
                           onClick={e => { e.stopPropagation(); setCalPickerId(calOpen ? null : place.id); }}
                           title="הכנס ללוח שנה"
-                        >📅</button>
+                        ><CalendarPlus size={16} strokeWidth={1.75} /></button>
                         {calOpen && tripDates.length > 0 && (
                           <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
                             <div className="cal-date-picker-title">בחרי תאריך</div>
@@ -1070,7 +1089,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                         className="idea-card-icon-btn"
                         onClick={e => { e.stopPropagation(); openSheetEdit(place); }}
                         title="ערוך"
-                      >✏️</button>
+                      ><Pencil size={16} strokeWidth={1.75} /></button>
                     </div>
                   </div>
                 </div>
@@ -1092,8 +1111,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 <div className="place-view-hero" style={{ backgroundImage: `url(${vpImg})` }}>
                   <div className="place-view-hero-overlay" />
                   <div className="place-view-hero-chips">
-                    <span className="idea-card-chip">{TYPE_ICONS[vp.type]} {vp.type}</span>
-                    {vp.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
+                    <span className="idea-card-chip"><Ic icon={TYPE_ICON_COMPONENTS[vp.type] || MapPin} size={13} style={{ marginInlineEnd: 4 }} />{vp.type}</span>
+                    {vp.must && <span className="idea-card-chip idea-card-chip--must"><Star size={13} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:3 }} />Must</span>}
                   </div>
                 </div>
               )}
@@ -1104,21 +1123,22 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   {vp.nameEn && <div style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 2 }}>{vp.nameEn}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="place-modal-close" onClick={() => openSheetEdit(vp)} title="עריכה">✏️</button>
-                  <button type="button" className="place-modal-close" onClick={() => setViewPlace(null)} title="סגור">✕</button>
+                  <button type="button" className="place-modal-close" onClick={() => openSheetEdit(vp)} title="עריכה"><Pencil size={16} strokeWidth={1.75} /></button>
+                  <button type="button" className="place-modal-close" onClick={() => setViewPlace(null)} title="סגור"><X size={16} strokeWidth={2} /></button>
                 </div>
               </div>
 
               <div className="place-modal-body place-view-body">
                 {/* Meta chips */}
                 <div className="place-view-chips">
-                  {vp.city && <span className="place-view-chip">📍 {vp.city}{vp.area ? ` · ${vp.area}` : ''}</span>}
-                  {vp.duration != null && vp.duration > 0 && <span className="place-view-chip">🕒 {vp.duration}ש' ביקור</span>}
-                  {vp.travelTime && <span className="place-view-chip">🚗 {vp.travelTime} מהמרכז</span>}
-                  {vp.rating != null && <span className="place-view-chip">⭐ {vp.rating} / 5</span>}
+                  {vp.city && <span className="place-view-chip"><Ic icon={MapPin} size={13} />{vp.city}{vp.area ? ` · ${vp.area}` : ''}</span>}
+                  {vp.duration != null && vp.duration > 0 && <span className="place-view-chip"><Ic icon={Clock} size={13} />{vp.duration}ש' ביקור</span>}
+                  {vp.travelTime && <span className="place-view-chip"><Ic icon={Car} size={13} />{vp.travelTime} מהמרכז</span>}
+                  {vp.rating != null && <span className="place-view-chip"><Ic icon={Star} size={13} />{vp.rating} / 5</span>}
                   {(vp.priceAdult != null || vp.priceChild != null) && (
                     <span className="place-view-chip">
-                      💶{vp.priceAdult != null ? ` מבוגר ₪${vp.priceAdult}` : ''}
+                      <Ic icon={Banknote} size={13} />
+                      {vp.priceAdult != null ? ` מבוגר ₪${vp.priceAdult}` : ''}
                       {vp.priceAdult != null && vp.priceChild != null ? ' · ' : ''}
                       {vp.priceChild != null ? `ילד ₪${vp.priceChild}` : ''}
                     </span>
@@ -1137,7 +1157,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                       target="_blank" rel="noreferrer"
                       className="place-view-link place-view-maps-link"
                     >
-                      📍 {vp.address || `${vp.nameEn || vp.nameHe}${vp.city ? `, ${vp.city}` : ''}`}
+                      <Ic icon={MapPin} size={14} /> {vp.address || `${vp.nameEn || vp.nameHe}${vp.city ? `, ${vp.city}` : ''}`}
                     </a>
                   );
                 })()}
@@ -1145,10 +1165,10 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 {/* Website or TripAdvisor fallback */}
                 {vp.website
                   ? <a href={vp.website} target="_blank" rel="noreferrer" className="place-view-link">
-                      🔗 {vp.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                      <Ic icon={LinkIcon} size={14} /> {vp.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                     </a>
                   : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((vp.nameEn || vp.nameHe) + (vp.city ? ' ' + vp.city : ''))}`} target="_blank" rel="noreferrer" className="place-view-link">
-                      🍴 חפש ב-TripAdvisor
+                      <Ic icon={ExternalLink} size={14} /> חפש ב-TripAdvisor
                     </a>
                 }
 
@@ -1158,7 +1178,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     type="button"
                     className={`btn-secondary ${vp.must ? 'btn-must-on' : ''}`}
                     onClick={() => { toggleMust(vp.id); setViewPlace(p => p ? { ...p, must: !p.must } : null); }}
-                  >{vp.must ? '⭐ Must — הסר' : '☆ הוסף ל-Must'}</button>
+                  ><Star size={14} strokeWidth={2} fill={vp.must ? 'currentColor' : 'none'} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:5 }} />{vp.must ? 'Must — הסר' : 'הוסף ל-Must'}</button>
 
                   {tripDates.length > 0 && (
                     <div style={{ position: 'relative' }}>
@@ -1166,7 +1186,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                         type="button"
                         className="btn-secondary"
                         onClick={() => setCalPickerId(calPickerId === vp.id ? null : vp.id)}
-                      >📅 הוסף לתכנית</button>
+                      ><CalendarPlus size={14} strokeWidth={1.75} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:5 }} />הוסף לתכנית</button>
                       {calPickerId === vp.id && (
                         <div className="cal-date-picker cal-date-picker--up" onClick={e => e.stopPropagation()}>
                           <div className="cal-date-picker-title">בחרי תאריך</div>
@@ -1198,7 +1218,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
             {/* ══ STEP 1: SEARCH ══ */}
             {sheetStep === 'search' && (<>
               <div className="exp-sheet-hdr">
-                <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+                <button className="exp-sheet-close" onClick={closeSheet}><X size={18} strokeWidth={2} /></button>
                 <span className="exp-sheet-title">רעיון חדש</span>
                 <div />
               </div>
@@ -1219,7 +1239,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     onClick={handleSearch}
                     disabled={sheetSearching || !searchQuery.trim()}
                   >
-                    {sheetSearching ? <><span className="spin">⟳</span> מחפש...</> : 'חפש'}
+                    {sheetSearching ? <><Search size={14} strokeWidth={2} className="spin" /> מחפש...</> : 'חפש'}
                   </button>
                   <button className="pls-btn-manual" onClick={switchToManual}>
                     הוסף ידנית
@@ -1243,7 +1263,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
               <div className="pls-results-wrap">
                 {serviceError ? (
                   <div className="pls-no-results">
-                    <div className="pls-no-results-icon">⚠️</div>
+                    <div className="pls-no-results-icon"><AlertTriangle size={40} strokeWidth={1.25} style={{ opacity:0.5 }} /></div>
                     <p>השירות אינו זמין כרגע</p>
                     <div className="pls-no-results-btns">
                       <button className="pls-btn-outline" onClick={() => { setSheetStep('search'); setServiceError(false); }}>נסי שוב</button>
@@ -1252,7 +1272,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div className="pls-no-results">
-                    <div className="pls-no-results-icon">🔍</div>
+                    <div className="pls-no-results-icon"><Search size={40} strokeWidth={1.25} style={{ opacity:0.3 }} /></div>
                     <p>לא נמצאו תוצאות עבור &ldquo;{searchQuery}&rdquo;</p>
                     <p className="pls-no-results-hint">נסי שם אחר, או הוסיפי ידנית</p>
                     <div className="pls-no-results-btns">
@@ -1288,7 +1308,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
             {/* ══ STEP 3: DETAILS FORM ══ */}
             {sheetStep === 'details' && (<>
               <div className="exp-sheet-hdr">
-                <button className="exp-sheet-close" onClick={closeSheet}>✕</button>
+                <button className="exp-sheet-close" onClick={closeSheet}><X size={18} strokeWidth={2} /></button>
                 <span className="exp-sheet-title">רעיון חדש</span>
                 <div />
               </div>
@@ -1305,7 +1325,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     />
                   ) : (
                     <div className="pls-img-placeholder">
-                      <span className="pls-img-icon">{TYPE_ICONS[draft.type] || '📌'}</span>
+                      <span className="pls-img-icon"><TypeIcon type={draft.type} size={56} /></span>
                     </div>
                   )}
                 </div>
@@ -1314,14 +1334,14 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 {draft.address && (
                   <div className="pls-addr-row">
                     <span className="pls-addr-text">{draft.address}</span>
-                    <span className="pls-addr-pin">📍</span>
+                    <span className="pls-addr-pin"><MapPin size={14} strokeWidth={1.75} /></span>
                   </div>
                 )}
 
                 {/* Loading indicator */}
                 {detailsLoading && (
                   <div className="pls-loading-bar">
-                    <span className="spin" style={{ fontSize: 14 }}>⟳</span>
+                    <RefreshCw size={14} strokeWidth={1.75} className="spin" />
                     <span>משלים פרטים...</span>
                   </div>
                 )}
@@ -1461,7 +1481,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     onClick={handleSheetSave}
                     disabled={sheetSaving}
                   >
-                    {sheetSaving ? <><span className="spin">⟳</span> שומר...</> : sheetEditingId ? 'עדכן מקום' : 'שמור בבנק'}
+                    {sheetSaving ? <><RefreshCw size={14} strokeWidth={1.75} className="spin" style={{ marginInlineEnd:5 }} /> שומר...</> : sheetEditingId ? 'עדכן מקום' : 'שמור בבנק'}
                   </button>
                   <button
                     className="pls-btn-refresh"
@@ -1470,7 +1490,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     aria-label="השלם פרטים חסרים"
                     title="השלם פרטים חסרים"
                   >
-                    {detailsLoading ? <span className="spin">⟳</span> : '↺'}
+                    <RefreshCw size={16} strokeWidth={1.75} className={detailsLoading ? 'spin' : ''} />
                   </button>
                 </div>
 
@@ -1487,7 +1507,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
           <div className="place-modal" role="dialog" aria-modal="true">
             <div className="place-modal-hdr">
               <h3>{editingId ? 'עריכת מקום' : 'רעיון חדש'}</h3>
-              <button type="button" className="place-modal-close" onClick={closeModal}>✕</button>
+              <button type="button" className="place-modal-close" onClick={closeModal}><X size={18} strokeWidth={2} /></button>
             </div>
             <div className="place-modal-body">
 
@@ -1502,7 +1522,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                 </div>
                 <button type="button" className="btn-ai" onClick={handleAIEnrich}
                   disabled={aiLoading || (!form.nameHe.trim() && !form.nameEn?.trim())} title="מלא פרטים עם AI (עברית או אנגלית)">
-                  {aiLoading ? '⏳' : '✨ AI'}
+                  {aiLoading ? <RefreshCw size={14} className="spin" strokeWidth={1.75} /> : 'AI'}
                 </button>
               </div>
               {aiError && <div className="ai-error">{aiError}</div>}
@@ -1543,7 +1563,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
                     className="img-url-input"
                   />
                   <button type="button" className="btn-img-search" onClick={handleImgSearch} disabled={imgSearching}>
-                    {imgSearching ? '⏳' : '🔍 חפש תמונה'}
+                    {imgSearching ? <><Search size={14} className="spin" strokeWidth={2} /> </> : <><Search size={14} strokeWidth={2} /> חפש תמונה</>}
                   </button>
                 </div>
                 {form.imageUrl && (
@@ -1568,7 +1588,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
               </div>
 
               <div className="checkboxes-row">
-                <label className="checkbox-label"><input type="checkbox" checked={form.must} onChange={e => setForm(f => ({ ...f, must: e.target.checked }))} /> ⭐ Must</label>
+                <label className="checkbox-label"><input type="checkbox" checked={form.must} onChange={e => setForm(f => ({ ...f, must: e.target.checked }))} /> <Star size={13} strokeWidth={2} style={{ display:'inline',verticalAlign:'middle',marginInlineEnd:3 }} />Must</label>
               </div>
 
               <div className="form-actions">
