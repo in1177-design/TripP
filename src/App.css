@@ -1747,17 +1747,26 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
   .hfc-route-line::before { display: none; }
   .hfc-route-line::after { font-size: 16px; }
 
-  /* ── Calendar grid: smaller cells on mobile ── */
-  .itin-cal-header, .itin-cal-week { gap: 3px; }
+  /* ── Calendar grid: compact cells on mobile ── */
+  .itin-cal-header, .itin-cal-week { gap: 2px; }
   .itin-cal-dh { font-size: 8px; }
-  .itin-cal-day { min-height: 72px; padding: 5px 4px 4px; gap: 1px; }
-  .itin-cal-empty { min-height: 72px; }
-  .icd-date-row { gap: 2px; }
-  .icd-month { font-size: 9px; }
-  .icd-num { font-size: 14px; }
-  .icd-city { font-size: 9px; }
-  .icd-icon { width: 12px; height: 12px; border-radius: 5px; }
+  .itin-cal-day { min-height: 64px; padding: 4px 3px 3px; gap: 1px; }
+  .itin-cal-empty { min-height: 64px; }
+  .icd-date-row { gap: 1px; }
+  .icd-month { font-size: 8px; }
+  .icd-num { font-size: 13px; }
+  .icd-city { display: none; } /* too wide for 7 columns on small screen */
+  .icd-icon { width: 11px; height: 11px; border-radius: 4px; }
   .icd-foot { gap: 2px; }
+
+  /* ── Itinerary station rows: tighter on mobile ── */
+  .itin-station-row { padding-right: 10px; padding-left: 12px; min-height: 80px; }
+  .itin-card-divider { margin: 0 8px; }
+  .itin-period-col { width: 44px; }
+  .itin-period-main { font-size: 13px; }
+  .itin-period-time { font-size: 11px; }
+  .itin-station-name { font-size: 14px; }
+  .itin-icon-circle { width: 40px; height: 40px; }
 
   /* ── Settings ── */
   .settings-root { padding: 12px; }
@@ -1822,6 +1831,7 @@ label { display: block; font-size: 12px; color: var(--ink-muted); margin-bottom:
 .itin-root {
   display: flex; flex-direction: column; gap: 0;
   min-height: 100%;
+  overflow-x: hidden; /* prevent calendar overflowing the page horizontally */
 }
 
 /* View toggle: מסלול / מפה */
