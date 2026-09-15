@@ -252,6 +252,8 @@ interface PlaceDraft {
   imageUrl:   string;
   must:       boolean;
   providerPlaceId?: string;
+  lat?: number;
+  lng?: number;
 }
 
 const emptyDraft = (): PlaceDraft => ({
@@ -491,6 +493,11 @@ export default function PlacesTab({ trip, onChange }: Props) {
       }
       // If user had a city and we found no Google city → keep existing (don't overwrite with AI)
       if (imgUrl) updated.imageUrl = imgUrl;
+      // Save lat/lng from Google Places
+      if (googleDetails?.location) {
+        updated.lat = googleDetails.location.lat;
+        updated.lng = googleDetails.location.lng;
+      }
       onChange({ ...trip, places: trip.places.map(p => p.id === place.id ? updated : p) });
       if (imgUrl) {
         setImageCache(c => ({ ...c, [place.id]: imgUrl }));
@@ -639,6 +646,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
       type:    TYPES.includes(result.category as PlaceType) ? result.category as PlaceType : 'אטרקציה',
       address: result.address,
       providerPlaceId: result.providerPlaceId,
+      lat: result.location?.lat,
+      lng: result.location?.lng,
     });
     setSheetMode('search');
     setSheetStep('details');
@@ -662,6 +671,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
           ),
           imageUrl:    dirty.has('imageUrl')     ? prev.imageUrl    : (details.imageUrls?.[0] || prev.imageUrl),
           providerPlaceId: details.providerPlaceId,
+          lat: details.location?.lat ?? prev.lat,
+          lng: details.location?.lng ?? prev.lng,
         };
       });
     } catch (err) {
@@ -763,6 +774,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
           priceChild:  draft.priceChild   ? Number(draft.priceChild)  : undefined,
           imageUrl:    draft.imageUrl     || undefined,
           providerPlaceId: draft.providerPlaceId,
+          lat:         draft.lat,
+          lng:         draft.lng,
         };
         onChange({ ...trip, places: trip.places.map(p => p.id === sheetEditingId ? updated : p) });
         if (draft.imageUrl) {
@@ -804,6 +817,8 @@ export default function PlacesTab({ trip, onChange }: Props) {
           priceAdult:  draft.priceAdult   ? Number(draft.priceAdult)  : undefined,
           priceChild:  draft.priceChild   ? Number(draft.priceChild)  : undefined,
           imageUrl:    draft.imageUrl     || undefined,
+          lat:         draft.lat,
+          lng:         draft.lng,
         };
         onChange({ ...trip, places: [...trip.places, newPlace] });
       }

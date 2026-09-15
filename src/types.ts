@@ -84,6 +84,8 @@ export interface Place {
   address?: string;       // כתובת מלאה (לקישור מפה)
   duration?: number;
   imageUrl?: string;  // cached thumbnail from Wikipedia / manual URL
+  lat?: number;       // WGS-84 latitude  (from Google Places)
+  lng?: number;       // WGS-84 longitude
 }
 
 export interface DaySchedule {

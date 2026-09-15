@@ -55,6 +55,7 @@ export interface PlaceDetailsResult {
   description: string;
   website?: string | null;
   imageUrls: string[];
+  location?: { lat: number; lng: number } | null;
 }
 
 export interface SavePlacePayload {
