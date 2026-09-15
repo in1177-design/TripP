@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import type { Trip, Place, PlaceType, ItineraryItem } from '../types';
 import { generateId } from '../storage';
 import { enrichPlace, searchPlaces, getPlaceDetails, savePlaceIdea } from '../aiService';
 import type { PlaceSearchResult } from '../aiService';
+
+const TripMap = lazy(() => import('./TripMap'));
 
 const TYPES: PlaceType[] = ['אטרקציה', 'מסעדה', 'קפה', 'מוזיאון', 'שוק', 'פארק', 'שכונה', 'אחר'];
 const TYPE_ICONS: Record<string, string> = {
@@ -268,6 +270,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
   const [modalOpen,     setModalOpen]     = useState(false);
   const [editingId,     setEditingId]     = useState<string | null>(null);
   const [form,          setForm]          = useState<Omit<Place, 'id'>>(blank());
+  const [placesView,    setPlacesView]    = useState<'bank' | 'map'>('bank');
   const [filter,        setFilter]        = useState<FilterKey>('הכל');
   const [selectedCity,  setSelectedCity]  = useState<string | null>(null); // active when filter==='ערים'
   // mainTab removed — replaced by filter chips
@@ -843,9 +846,31 @@ export default function PlacesTab({ trip, onChange }: Props) {
           <button className="btn-secondary btn-sm" onClick={openSheet}>🔍 חפש מקום</button>
           <button className="btn-primary btn-sm" onClick={openSheetManual}>+ הוסף ידנית</button>
         </div>
+        <div className="places-view-toggle">
+          <button
+            className={`places-view-btn ${placesView === 'bank' ? 'active' : ''}`}
+            onClick={() => setPlacesView('bank')}
+          >📋 בנק</button>
+          <button
+            className={`places-view-btn ${placesView === 'map' ? 'active' : ''}`}
+            onClick={() => setPlacesView('map')}
+          >🗺️ מפה</button>
+        </div>
       </div>
 
+      {/* ── MAP VIEW ── */}
+      {placesView === 'map' && (
+        <Suspense fallback={
+          <div className="tripmap-empty" style={{ minHeight: 340, fontSize: 14, color: 'var(--ink-muted)' }}>
+            טוען מפה...
+          </div>
+        }>
+          <TripMap places={trip.places || []} destination={trip.destination} />
+        </Suspense>
+      )}
+
       {/* ── FILTER CHIPS ── */}
+      {placesView === 'bank' && (<>
       <div className="filter-chips-row">
         {FILTER_CHIPS.map(({ key, label }) => (
           <button
@@ -1129,6 +1154,7 @@ export default function PlacesTab({ trip, onChange }: Props) {
           </div>
         );
       })()}
+      </>)}
 
       {/* ── ADD / SEARCH SHEET ── */}
       {sheetOpen && (

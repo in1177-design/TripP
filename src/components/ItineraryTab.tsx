@@ -1,8 +1,6 @@
-import { useState, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import type { Trip, ItineraryItem, ItemType, DayPeriod, Place } from '../types';
 import { generateId } from '../storage';
-
-const TripMap = lazy(() => import('./TripMap'));
 
 interface Props {
   trip: Trip;
@@ -161,7 +159,6 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
     return getDates(trip.startDate, trip.endDate);
   }, [trip.startDate, trip.endDate]);
 
-  const [mainView, setMainView]     = useState<'calendar' | 'map'>('calendar');
   const [activeDay, setActiveDay] = useState<string>(dates[0] || '');
   const [sheetOpen, setSheetOpen]   = useState(false);
   const [editItem, setEditItem]     = useState<ItineraryItem | null>(null);
@@ -303,31 +300,7 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
   return (
     <div className="itin-root" dir="rtl">
 
-      {/* ══ VIEW TOGGLE: מסלול / מפה ═══════════════════════════ */}
-      <div className="itin-view-toggle">
-        <button
-          className={`itin-view-btn ${mainView === 'calendar' ? 'active' : ''}`}
-          onClick={() => setMainView('calendar')}
-        >📅 מסלול</button>
-        <button
-          className={`itin-view-btn ${mainView === 'map' ? 'active' : ''}`}
-          onClick={() => setMainView('map')}
-        >🗺️ מפה</button>
-      </div>
-
-      {/* ══ MAP VIEW ═══════════════════════════════════════════ */}
-      {mainView === 'map' && (
-        <Suspense fallback={
-          <div className="tripmap-empty" style={{ minHeight: 340, fontSize: 14, color: 'var(--ink-muted)' }}>
-            טוען מפה...
-          </div>
-        }>
-          <TripMap places={trip.places || []} destination={trip.destination} />
-        </Suspense>
-      )}
-
       {/* ══ CALENDAR GRID ══════════════════════════════════════ */}
-      {mainView === 'calendar' && (
       <CalendarGrid
         dates={dates}
         activeDay={activeDay}
@@ -340,10 +313,9 @@ export default function ItineraryTab({ trip, onUpdate }: Props) {
         getDayCity={d => dayBases[d] || ''}
         onSelect={setActiveDay}
       />
-      )}
 
       {/* ══ DAY VIEW ═══════════════════════════════════════════ */}
-      {mainView === 'calendar' && activeDay && (
+      {activeDay && (
         <div className="itin-day">
 
           {/* ── Day header: title + button in one row ── */}
