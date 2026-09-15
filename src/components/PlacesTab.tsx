@@ -12,6 +12,18 @@ const TYPE_ICONS: Record<string, string> = {
   'שוק': '🛒', 'פארק': '🌳', 'שכונה': '🏘️', 'אחר': '📌',
 };
 
+// Badge background colors per type (matches Figma)
+const TYPE_COLORS: Record<string, string> = {
+  'אטרקציה': '#f39c12',
+  'מסעדה':   '#f97316',
+  'קפה':     '#f97316',
+  'מוזיאון': '#8b5cf6',
+  'פארק':    '#2ecc71',
+  'שוק':     '#71717a',
+  'שכונה':   '#3b82f6',
+  'אחר':     '#9ca3af',
+};
+
 const WEEK_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_HE = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
@@ -924,98 +936,121 @@ export default function PlacesTab({ trip, onChange }: Props) {
             return (
               <div
                 key={place.id}
-                className={`idea-card ${place.must ? 'idea-card--must' : ''}`}
+                className="idea-card"
                 onClick={() => setViewPlace(place)}
-                style={{ cursor: 'pointer' }}
               >
-                {/* Image */}
-                <div
-                  className="idea-card-img"
-                  style={img ? { backgroundImage: `url(${img})` } : {}}
-                >
-                  {!img && <span className="idea-card-img-placeholder">{TYPE_ICONS[place.type] || '📌'}</span>}
-                  <div className="idea-card-chips">
-                    <span className="idea-card-chip">{TYPE_ICONS[place.type]} {place.type}</span>
-                    {place.must && <span className="idea-card-chip idea-card-chip--must">⭐ Must</span>}
+                {/* ── Hero ── */}
+                <div className="idea-card-hero">
+                  {img ? (
+                    <>
+                      <img src={img} alt={place.nameHe} className="idea-card-hero-img" />
+                      <div className="idea-card-hero-overlay" />
+                    </>
+                  ) : (
+                    <span className="idea-card-hero-icon" aria-hidden="true">
+                      {TYPE_ICONS[place.type] || '📌'}
+                    </span>
+                  )}
+
+                  {/* Category + Must badges */}
+                  <div className="idea-card-badges">
+                    {place.must && (
+                      <span className="idea-card-badge idea-card-badge--must">Must ⭐</span>
+                    )}
+                    <span
+                      className="idea-card-badge"
+                      style={{ background: TYPE_COLORS[place.type] || '#9ca3af' }}
+                    >{place.type}</span>
                   </div>
-                  <button type="button" className="idea-card-del" onClick={e => { e.stopPropagation(); remove(place.id); }} title="מחק">✕</button>
+
+                  {/* Delete */}
+                  <button
+                    type="button"
+                    className="idea-card-del"
+                    onClick={e => { e.stopPropagation(); remove(place.id); }}
+                    title="מחק"
+                  >✕</button>
                 </div>
 
-                {/* Body */}
+                {/* ── Body ── */}
                 <div className="idea-card-body">
+                  {/* Names */}
                   <div className="idea-card-names">
                     <span className="idea-card-name-he">{place.nameHe}</span>
                     {place.nameEn && <span className="idea-card-name-en">{place.nameEn}</span>}
                   </div>
 
-                  {place.description && (
-                    <p className="idea-card-desc">{place.description}</p>
-                  )}
+                  {/* Description */}
+                  <p className="idea-card-desc">
+                    {place.description || ' '}
+                  </p>
 
-                  <div className="idea-card-meta">
-                    {place.duration != null && place.duration > 0 && (
-                      <span className="idea-card-meta-chip">🕒 {place.duration}ש'</span>
-                    )}
-                    {place.rating != null && (
-                      <span className="idea-card-meta-chip">⭐ {place.rating}</span>
-                    )}
-                    {place.travelTime && (
-                      <span className="idea-card-meta-chip">🚗 {place.travelTime}</span>
-                    )}
+                  {/* Pills */}
+                  <div className="idea-card-pills">
                     {(place.priceAdult != null || place.priceChild != null) && (
-                      <span className="idea-card-meta-chip">
-                        💶{place.priceAdult != null ? ` מבוגר ₪${place.priceAdult}` : ''}
+                      <span className="idea-card-pill idea-card-pill--price">
+                        {place.priceAdult != null ? `מבוגר ₪${place.priceAdult}` : ''}
                         {place.priceAdult != null && place.priceChild != null ? ' · ' : ''}
                         {place.priceChild != null ? `ילד ₪${place.priceChild}` : ''}
+                        {' 🏷️'}
                       </span>
                     )}
-                    {place.website
-                      ? <a href={place.website} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🔗 אתר</a>
-                      : <a href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent((place.nameEn || place.nameHe) + (place.city ? ' ' + place.city : ''))}`} target="_blank" rel="noreferrer" className="idea-card-meta-chip idea-card-link">🍴 TripAdvisor</a>
-                    }
+                    {place.rating != null && (
+                      <span className="idea-card-pill idea-card-pill--rating">
+                        {place.rating} ⭐
+                      </span>
+                    )}
+                    <a
+                      href={place.website
+                        ? place.website
+                        : `https://www.tripadvisor.com/Search?q=${encodeURIComponent((place.nameEn || place.nameHe) + (place.city ? ' ' + place.city : ''))}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="idea-card-pill idea-card-pill--ta"
+                      onClick={e => e.stopPropagation()}
+                    >{place.website ? '🔗 אתר' : 'TripAdvisor'}</a>
                   </div>
+
+                  {/* Divider */}
+                  <div className="idea-card-divider" />
 
                   {/* Footer */}
                   <div className="idea-card-footer">
+                    {/* Must toggle */}
+                    <button
+                      type="button"
+                      className={`idea-card-icon-btn ${place.must ? 'on' : ''}`}
+                      onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
+                      title="Must"
+                    >{place.must ? '⭐' : '☆'}</button>
+
+                    {/* Action icons (right side) */}
                     <div className="idea-card-actions">
-
-                      {/* Must ⭐ */}
+                      {/* Refresh */}
                       <button
                         type="button"
-                        className={`idea-card-btn ${place.must ? 'on' : ''}`}
-                        onClick={e => { e.stopPropagation(); toggleMust(place.id); }}
-                        title="Must"
-                      >{place.must ? '⭐' : '☆'}</button>
-
-                      {/* Refresh 🔄 */}
-                      <button
-                        type="button"
-                        className="idea-card-btn idea-card-btn--refresh"
+                        className="idea-card-icon-btn"
                         onClick={e => { e.stopPropagation(); handleRefresh(place); }}
                         disabled={isRefreshing}
                         title="רענן פרטים"
                       >{isRefreshing ? <span className="spin">⟳</span> : '🔄'}</button>
 
-                      {/* Add to calendar 📅 */}
+                      {/* Calendar */}
                       <div className="cal-btn-wrap" onClick={e => e.stopPropagation()}>
                         <button
                           type="button"
-                          className={`idea-card-btn idea-card-btn--cal ${calOpen ? 'on' : ''}`}
+                          className={`idea-card-icon-btn ${calOpen ? 'on' : ''}`}
                           onClick={e => { e.stopPropagation(); setCalPickerId(calOpen ? null : place.id); }}
                           title="הכנס ללוח שנה"
                         >📅</button>
-
                         {calOpen && tripDates.length > 0 && (
                           <div className="cal-date-picker" onClick={e => e.stopPropagation()}>
                             <div className="cal-date-picker-title">בחרי תאריך</div>
                             <div className="cal-date-list">
                               {tripDates.map(date => (
-                                <button
-                                  key={date}
-                                  type="button"
-                                  className="cal-date-btn"
-                                  onClick={() => handleAddToCalendar(place, date)}
-                                >
+                                <button key={date} type="button" className="cal-date-btn"
+                                  onClick={() => handleAddToCalendar(place, date)}>
                                   {fmtDateLabel(date)}
                                 </button>
                               ))}
@@ -1029,14 +1064,13 @@ export default function PlacesTab({ trip, onChange }: Props) {
                         )}
                       </div>
 
-                      {/* Edit ✏️ */}
+                      {/* Edit */}
                       <button
                         type="button"
-                        className="idea-card-btn idea-card-edit"
+                        className="idea-card-icon-btn"
                         onClick={e => { e.stopPropagation(); openSheetEdit(place); }}
                         title="ערוך"
                       >✏️</button>
-
                     </div>
                   </div>
                 </div>
